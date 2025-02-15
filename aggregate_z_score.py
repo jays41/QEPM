@@ -1,39 +1,33 @@
 import numpy as np
 import pandas as pd
 
-def compute_aggregate_z_scores(factor_data, factor_groups, factor_weights, group_weights):
-  # Built according to chapter 5.4.5
+def standardize(df):
+    # Convert raw factor data into Z-scores
+    return (df - df.mean()) / df.std()
+
+def compute_aggregate_z_score(z_scores, factor_group_weights):
     """
     Computes the aggregate Z-score for each stock.
 
-    :param factor_data: DataFrame where rows are stocks and columns are factor exposures.
-    :param factor_groups: Dictionary mapping factor group names to lists of factors.
-    :param factor_weights: Dictionary mapping factor group names to weight dictionaries for their factors.
-    :param group_weights: Dictionary mapping factor group names to their weights.
-    :return: Series with aggregate Z-scores for each stock.
+    :param z_scores: DataFrame (rows: stocks, cols: factors) containing Z-scores
+    :param factor_group_weights: Dict {factor_group: {factor: weight}} defining weights per factor group
+    :return: DataFrame (rows: stocks, cols: factor_groups) of aggregate Z-scores
     """
+    # Compute Factor Group Z-Scores
+    factor_group_scores = {}
+    for group, weights in factor_group_weights.items():
+        relevant_factors = list(weights.keys())
 
-    z_scores = (factor_data - factor_data.mean()) / factor_data.std() # Compute Z-scores for each factor
+        # Matrix multiplication: weighted sum of Z-scores
+        factor_group_scores[group] = z_scores[relevant_factors] @ np.array(list(weights.values()))
 
-    # Compute factor group Z-scores
-    factor_group_z = {}
-    for group, factors in factor_groups.items():
-        if not all(f in z_scores.columns for f in factors):
-            raise ValueError(f"Some factors in {group} are missing from data.")
+    factor_group_df = pd.DataFrame(factor_group_scores, index=z_scores.index)
 
-        # Weighted sum of factor Z-scores
-        weights = np.array([factor_weights[group][f] for f in factors])
-        weights /= weights.sum()  # Ensure weights sum to 1
-        factor_group_z[group] = z_scores[factors].dot(weights)
+    # Compute Final Aggregate Z-Score
+    factor_group_weights_vec = np.array([sum(weights.values()) for weights in factor_group_weights.values()])
+    aggregate_z_scores = factor_group_df @ factor_group_weights_vec
 
-    factor_group_z_df = pd.DataFrame(factor_group_z)
-
-    # Compute Aggregate Z-score for each stock
-    group_weight_array = np.array([group_weights[g] for g in factor_group_z.keys()])
-    group_weight_array /= group_weight_array.sum()  # Normalize group weights
-    aggregate_z = factor_group_z_df.dot(group_weight_array)
-
-    return aggregate_z
+    return aggregate_z_scores
 
 
 # Test data
@@ -61,5 +55,6 @@ group_weights = {
 }
 
 # Main
-aggregate_z_scores = compute_aggregate_z_scores(factor_data, factor_groups, factor_weights, group_weights)
+z_scores = standardize(factor_data)
+aggregate_z_scores = compute_aggregate_z_score(z_scores, factor_weights, group_weights)
 print(aggregate_z_scores)
