@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import statsmodels.api as sm
 
 def standardize(df):
     # Convert raw factor data into Z-scores
@@ -28,6 +29,45 @@ def compute_aggregate_z_score(z_scores, factor_group_weights):
     aggregate_z_scores = factor_group_df @ factor_group_weights_vec
 
     return aggregate_z_scores
+
+
+def estimate_alpha(stock_returns, factor_returns, betas, aggregate_z_scores):
+    """
+    Estimates alpha using regression with aggregate Z-scores.
+    
+    :param stock_returns: DataFrame of stock returns (rows: time, cols: stocks)
+    :param factor_returns: DataFrame of factor returns (rows: time, cols: factors)
+    :param betas: DataFrame of factor betas for each stock (cols: stocks, rows: factors)
+    :param aggregate_z_scores: DataFrame of aggregate Z-scores (rows: time, cols: stocks)
+    :return: Dictionary of estimated (gamma, delta) coefficients for each stock
+    """
+
+    # Compute alpha (𝛼 = actual return - factor model return)
+    expected_returns = factor_returns.dot(betas)  # β' * f_t
+    alpha = stock_returns - expected_returns
+
+    # Run regression α_i,t = γ_i + δ * Z_i,t-1 + ε_i,t
+    results = {}
+    for stock in stock_returns.columns:
+        y = alpha[stock][1:]  # α_i,t (skip first row since lagging)
+        X = aggregate_z_scores[stock].shift(1)[1:]  # Z_i,t-1 (lagged)
+        X = sm.add_constant(X)  # Add γ_i (intercept)
+        
+        # Check if there are enough data points to run regression
+        if len(y) < 2:
+            results[stock] = {"gamma": None, "delta": None, "p-value": None}
+            continue
+
+        model = sm.OLS(y, X).fit()
+        
+        # Extract regression results safely
+        gamma = model.params.iloc[0] if len(model.params) > 0 else None
+        delta = model.params.iloc[1] if len(model.params) > 1 else None
+        p_value = model.pvalues.iloc[1] if len(model.pvalues) > 1 else None
+
+        results[stock] = {"gamma": gamma, "delta": delta, "p-value": p_value}
+
+    return results
 
 
 # Test data
