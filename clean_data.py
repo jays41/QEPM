@@ -27,13 +27,12 @@ def get_cash_conversion_cycle(data):
     
     return ccc
 
-
+cleaned_rows = []
 df = pd.read_csv('QEPM\data\Data 1500 2010 Start\slmvu0qpmt6cygdi.csv')
 cleaned_df = pd.DataFrame(columns=['gvkey', 'ticker', 'dividend-yield', 'EV-EBITDA', 'price-book', 'price-cf', 'price-earnings', 'price-EBITDA', 'price-sales', 'price-earnings-growth', 'price-earnings-growth-dividend-yield', 'cash-ratio', 'current-ratio', 'quick-ratio', 'inventory-turnover', 'receivables-turnover', 'total-asset-turnover', 'cash-conversion-cycle', 'gross-profit-margin', 'net-profit-margin', 'operating-profit-margin', 'return-on-assets', 'return-on-common-equity', 'return-on-total-capital', 'debt-equity', 'total-debt-ratio', 'interest-coverage-ratio'])
 for i in range(len(df)):
     row = df.iloc[i]
-    print()
-    new_row = pd.DataFrame({
+    new_row = {
         'gvkey': row['gvkey'],
         'ticker': row['TICKER'],
         'dividend-yield': row['divyield'],
@@ -43,7 +42,7 @@ for i in range(len(df)):
         'price-earnings': row['pe_inc'], # two options for this, was not sure which one to use: "P/E (Diluted, Excl. EI)": "pe_exi", "P/E (Diluted, Incl. EI)": "pe_inc"
         'price-EBITDA': get_price_ebitda(row),
         'price-sales': row['ps'],
-        'price-earnings-growth': row['peg_ltg_forward'] or row['peg_1yr_forward'] or row['peg_trailing'], # multiple values available - not sure which we want to use
+        'price-earnings-growth': None, # row['peg_ltg_forward'] or row['peg_1yr_forward'] or row['peg_trailing'], # multiple values available - not sure which we want to use
         'price-earnings-growth-dividend-yield': None, # can do once we choose which peg ratio to use
         'cash-ratio': row['cash_ratio'],
         'current-ratio': row['curr_ratio'],
@@ -61,7 +60,10 @@ for i in range(len(df)):
         'debt-equity': row['de_ratio'],
         'total-debt-ratio': row['debt_at'],
         'interest-coverage-ratio': row['intcov_ratio']
-    })
+    }
+    cleaned_rows.append(new_row)
+
+cleaned_df = pd.DataFrame(cleaned_rows)
 
 '''
 dividend-yield, EV-EBITDA, price-book, price-cf, price-earnings, price-EBITDA, price-sales, price-earnings-growth, price-earnings-growth-dividend-yield, cash-ratio, current-ratio, quick-ratio, inventory-turnover, receivables-turnover, total-asset-turnover, cash-conversion-cycle, gross-profit-margin, net-profit-margin, operating-profit-margin, return-on-assets, return-on-common-equity, return-on-total-capital, debt-equity, total-debt-ratio, interest-coverage-ratio
