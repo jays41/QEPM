@@ -1,6 +1,8 @@
 import numpy as np
 import cvxpy as cp
 
+# need to add sectors for each stock
+
 # Example Data
 np.random.seed(42)  # For reproducibility
 n = 40  # Number of stocks
@@ -23,7 +25,7 @@ betas = np.random.randn(n) * 0.5  # Simulated market betas
 betas = betas / np.max(np.abs(betas)) * 0.5
 
 # Target risk level (instead of target return)
-target_risk = 0.05  # Example: 5% volatility
+target_risk = 0.05  # Example: 5% volatility # change this <---------------------
 
 # Optimization Variables
 w = cp.Variable(n)  # Stock weights
