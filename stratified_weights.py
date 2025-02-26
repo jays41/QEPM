@@ -25,6 +25,9 @@ betas = betas / np.max(np.abs(betas)) * 0.5
 # Define industry sectors (example: 4 sectors)
 sectors = np.random.randint(0, 4, size=n)
 
+# Calculate sector proportions
+sector_proportions = {sector: np.sum(sectors == sector) / n for sector in np.unique(sectors)}
+
 # Target risk level (instead of target return)
 target_risk = 0.05  # Example: 5% volatility
 
@@ -53,10 +56,11 @@ constraints = [
     w <= 0.1  # Long position limit
 ]
 
-# Add sector neutrality constraints
+# Add sector neutrality and proportional constraints
 for sector in np.unique(sectors):
     sector_indices = np.where(sectors == sector)[0]
     constraints.append(cp.sum(w[sector_indices]) == 0)  # Sector neutrality
+    constraints.append(cp.sum(cp.abs(w[sector_indices])) <= sector_proportions[sector] * 2)  # Proportional sector weights
 
 # Try solving the problem with improved solver parameters
 try:
