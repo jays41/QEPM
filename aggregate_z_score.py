@@ -69,7 +69,7 @@ def process_stock_chunk(
     
     return chunk_results
 
-def estimate_alpha(
+def no_benchmark_estimate_alpha(
     stock_returns: pd.DataFrame,
     factor_returns: pd.DataFrame,
     betas: pd.DataFrame,
@@ -124,7 +124,7 @@ def run_analysis(factor_data, factor_groups, factor_weights, group_weights,
     aggregate_z_scores = compute_aggregate_z_score(z_scores, factor_weights, group_weights)
     
     # Estimate alpha
-    alpha_results = estimate_alpha(stock_returns, factor_returns, betas, 
+    alpha_results = no_benchmark_estimate_alpha(stock_returns, factor_returns, betas, 
                                  aggregate_z_scores, n_jobs=n_jobs)
     
     end_time = time.time()
