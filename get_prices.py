@@ -5,7 +5,7 @@ import numpy as np
 daily_prices = pd.read_csv(r"QEPM\data\daily_stock_price_data.csv", 
                          usecols=['InfoCode', 'MarketDate', 'close_usd'])
 
-financials = pd.read_csv(r"QEPM\data\Data 1500 2010 Start\stock_fundamental_data.csv",
+financials = pd.read_csv(r"QEPM\data\stock_fundamental_data.csv",
                        usecols=['gvkey', 'TICKER'])
 
 print(f"Loaded daily_prices with {len(daily_prices)} rows")
