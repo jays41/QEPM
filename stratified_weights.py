@@ -1,50 +1,45 @@
 import numpy as np
 import cvxpy as cp
+from preweighting_calculations import get_preweighting_data
 
-# Example Data
-np.random.seed(42)  # For reproducibility
-n = 40  # Number of stocks
-expected_returns = np.random.randn(n) * 0.02  # Simulated expected returns
+expected_returns, cov_matrix, betas, sectors_array = get_preweighting_data()
 
-# Scale data for numerical stability
-expected_returns = expected_returns / np.max(np.abs(expected_returns))
+n = len(expected_returns)
 
-# Create a proper positive semidefinite covariance matrix
-temp = np.random.rand(n, n)
-temp_matrix = temp.T @ temp
-cov_matrix = (temp_matrix + temp_matrix.T) / 2
-cov_matrix += np.eye(n) * 0.01
 
-# Scale covariance matrix
-cov_matrix = cov_matrix / np.max(np.abs(cov_matrix))
+target_risk = 0.1
 
-betas = np.random.randn(n) * 0.5  # Simulated market betas
-# Scale betas for consistency
-betas = betas / np.max(np.abs(betas)) * 0.5
+# Small tolerance for equality constraints
+epsilon = 1e-6
 
-# Define industry sectors (example: 4 sectors)
-sectors = np.random.randint(0, 4, size=n)
 
-# Calculate sector proportions
-sector_proportions = {sector: np.sum(sectors == sector) / n for sector in np.unique(sectors)}
 
-# Target risk level (instead of target return)
-target_risk = 0.05  # Example: 5% volatility
+unique_sectors = np.unique(sectors_array)
+num_sectors = len(unique_sectors)
 
-# Optimization Variables
+# Calculate sector proportions and indices for each sector
+sector_proportions = {}
+sector_indices = {}
+for sector_id in unique_sectors:
+    # Get indices of stocks belonging to this sector
+    indices = np.where(sectors_array == sector_id)[0]
+    sector_indices[sector_id] = indices
+    
+    sector_proportions[sector_id] = len(indices) / n # Calculate proportion of stocks in this sector
+
+print("\nSector Distribution:")
+for sector_id in unique_sectors:
+    stock_count = len(sector_indices[sector_id])
+    proportion = sector_proportions[sector_id] * 100
+    print(f"Sector {sector_id}: {stock_count} stocks ({proportion:.2f}%)")
+
+
 w = cp.Variable(n)  # Stock weights
 
-# Use properly defined expressions for CVXPY
-# Alternative risk formulation using Second-Order Cone
-# We'll use sqrt(w.T @ cov_matrix @ w) <= target_risk
-# This is equivalent to ||Ax|| <= t where A is Cholesky decomposition of cov
 cov_chol = np.linalg.cholesky(cov_matrix)
 
 # Objective Function: Maximize Expected Return
 objective = cp.Maximize(cp.sum(cp.multiply(expected_returns, w)))
-
-# Small tolerance for equality constraints
-epsilon = 1e-6
 
 # Constraints
 constraints = [
@@ -56,17 +51,24 @@ constraints = [
     w <= 0.1  # Long position limit
 ]
 
-# Add sector neutrality and proportional constraints
-for sector in np.unique(sectors):
-    sector_indices = np.where(sectors == sector)[0]
-    constraints.append(cp.sum(w[sector_indices]) == 0)  # Sector neutrality
-    constraints.append(cp.sum(cp.abs(w[sector_indices])) <= sector_proportions[sector] * 2)  # Proportional sector weights
+# Add sector-specific constraints
+for sector_id in unique_sectors:
+    indices = sector_indices[sector_id]
+    sector_weight = w[indices]
+    
+    # Sector neutrality - sum of weights within sector should be zero
+    constraints.append(cp.sum(sector_weight) == 0)
+    
+    # Proportional sector weights - gross exposure should be proportional to sector size
+    max_sector_exposure = sector_proportions[sector_id] * 2  # Proportional to sector size
+    constraints.append(cp.sum(cp.abs(sector_weight)) <= max_sector_exposure)
+
 
 # Try solving the problem with improved solver parameters
 try:
     # Try SCS with better parameters
     problem = cp.Problem(objective, constraints)
-    problem.solve(solver=cp.SCS, eps=1e-8, max_iters=10000, alpha=1.8)
+    problem.solve(solver=cp.SCS, eps=1e-8, max_iters=25000, alpha=1.8)
     print("Solved with SCS using improved parameters")
 except Exception as e:
     print(f"SCS solver failed: {e}")
@@ -120,16 +122,22 @@ if problem.status == "optimal" or problem.status == "optimal_inaccurate":
     
     # Sector-wise analysis
     print("\nSector-wise Analysis:")
-    for sector in np.unique(sectors):
-        sector_indices = np.where(sectors == sector)[0]
-        sector_weights = optimized_weights[sector_indices]
+    for sector_id in unique_sectors:
+        indices = sector_indices[sector_id]
+        sector_weights = optimized_weights[indices]
         sector_long_positions = np.sum(sector_weights[sector_weights > 0])
         sector_short_positions = np.sum(sector_weights[sector_weights < 0])
-        print(f"\nSector {sector}:")
+        sector_exposure = np.sum(np.abs(sector_weights))
+        max_allowed = sector_proportions[sector_id] * 2
+        
+        print(f"\nSector {sector_id}:")
+        print(f"  Number of stocks: {len(indices)}")
         print(f"  Sum of weights (should be 0): {np.sum(sector_weights):.8f}")
         print(f"  Long positions: {sector_long_positions:.6f}")
         print(f"  Short positions: {sector_short_positions:.6f}")
-        print(f"  Gross exposure: {np.sum(np.abs(sector_weights)):.6f}")
+        print(f"  Gross exposure: {sector_exposure:.6f} (max allowed: {max_allowed:.6f})")
+        print(f"  Exposure constraint satisfied: {sector_exposure <= max_allowed + 1e-6}")
+
 else:
     print("Optimization failed with status:", problem.status)
 
