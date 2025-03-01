@@ -37,7 +37,7 @@ def get_pegy(data):
     
 
 cleaned_rows = []
-df = pd.read_csv('QEPM\data\Data 1500 2010 Start\stock_fundamental_data.csv')
+df = pd.read_csv('QEPM\data\stock_fundamental_data.csv')
 cleaned_df = pd.DataFrame(columns=['gvkey', 'ticker', 'dividend-yield', 'EV-EBITDA', 'price-book', 'price-cf', 'price-earnings', 'price-EBITDA', 'price-sales', 'price-earnings-growth', 'price-earnings-growth-dividend-yield', 'cash-ratio', 'current-ratio', 'quick-ratio', 'inventory-turnover', 'receivables-turnover', 'total-asset-turnover', 'cash-conversion-cycle', 'gross-profit-margin', 'net-profit-margin', 'operating-profit-margin', 'return-on-assets', 'return-on-common-equity', 'return-on-total-capital', 'debt-equity', 'total-debt-ratio', 'interest-coverage-ratio'])
 print(df.head())
 
