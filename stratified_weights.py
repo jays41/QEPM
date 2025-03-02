@@ -6,12 +6,17 @@ expected_returns, cov_matrix, betas, sectors_array = get_preweighting_data()
 
 n = len(expected_returns)
 
+# daily
+# target_risk = 0.01
 
-target_risk = 0.1
+# annual
+target_annual_risk = 0.01
+target_risk = (1 + target_annual_risk)**(1/252) - 1
+
+
 
 # Small tolerance for equality constraints
 epsilon = 1e-6
-
 
 
 unique_sectors = np.unique(sectors_array)
@@ -108,17 +113,28 @@ if problem.status == "optimal" or problem.status == "optimal_inaccurate":
     portfolio_variance = optimized_weights @ cov_matrix @ optimized_weights
     portfolio_volatility = np.sqrt(portfolio_variance)
     
+    # Calculating annual expected returns
+    expected_daily_returns = np.sum(expected_returns * optimized_weights)
+    annual_return = (1 + expected_daily_returns) ** 252 - 1
+    annual_volatility = portfolio_volatility * np.sqrt(252)
+    annual_sharpe = annual_return / annual_volatility
+    
     # Verification
     print("\nVerification:")
     print(f"Sum of weights (dollar neutrality, should be 0): {np.sum(optimized_weights):.8f}")
     print(f"Long positions: {long_positions:.6f}")
     print(f"Short positions: {short_positions:.6f}")
     print(f"Beta neutrality (should be 0): {np.sum(betas * optimized_weights):.8f}")
-    print(f"Expected return: {np.sum(expected_returns * optimized_weights):.6f}")
+    print(f"Expected return: {expected_daily_returns:.6f} ({100 * expected_daily_returns:.6f} %) per day")
     print(f"Portfolio variance: {portfolio_variance:.6f}")
     print(f"Portfolio volatility: {portfolio_volatility:.6f}")
     print(f"Target volatility: {target_risk:.6f}")
     print(f"Gross exposure: {np.sum(np.abs(optimized_weights)):.6f}")
+    
+    print("\nAnnualised Metrics:")
+    print(f"Annual expected return: {annual_return:.6f} ({100 * annual_return:.2f}%)")
+    print(f"Annual volatility: {annual_volatility:.6f} ({100 * annual_volatility:.2f}%)")
+    print(f"Annual Sharpe ratio: {annual_sharpe:.4f}")
     
     # Sector-wise analysis
     print("\nSector-wise Analysis:")
