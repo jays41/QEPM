@@ -1,8 +1,9 @@
+import pandas as pd
 import numpy as np
 import cvxpy as cp
 from preweighting_calculations import get_preweighting_data
 
-expected_returns, cov_matrix, betas, sectors_array = get_preweighting_data()
+stock_data, expected_returns, cov_matrix, betas, sectors_array = get_preweighting_data()
 
 n = len(expected_returns)
 
@@ -184,3 +185,53 @@ if problem.status == "optimal" or problem.status == "optimal_inaccurate":
     print(f"Risk constraint: {portfolio_volatility:.6f} <= {target_risk:.6f} is {portfolio_volatility <= target_risk + 1e-6}")
     print(f"Gross exposure: {np.sum(np.abs(optimized_weights)):.6f} <= 2 is {np.sum(np.abs(optimized_weights)) <= 2 + 1e-6}")
     print(f"Position limits satisfied: {np.all(optimized_weights >= -0.1-1e-6) and np.all(optimized_weights <= 0.1+1e-6)}")
+    
+
+
+
+# Create a DataFrame with stock tickers, sectors, and weights
+if problem.status == "optimal" or problem.status == "optimal_inaccurate":
+    # First, check the lengths to debug
+    print(f"Number of unique tickers: {len(stock_data['ticker'].unique())}")
+    print(f"Length of sectors_array: {len(sectors_array)}")
+    print(f"Length of optimized_weights: {len(optimized_weights)}")
+    
+    # Get the correct tickers in the same order as sectors_array and optimized_weights
+    # We need to ensure they all have the same length and order
+    tickers = stock_data['ticker'].unique()
+    
+    # Make sure we use the same number of items for all arrays
+    n_stocks = min(len(tickers), len(sectors_array), len(optimized_weights))
+    
+    # Create a mapping from sectors to names if possible
+    sector_name_mapping = {}
+    sector_data = stock_data.drop_duplicates('ticker')[['ticker', 'sector']]
+    sector_dict = {i: sector for i, sector in enumerate(sector_data['sector'].unique())}
+    
+    # Create the DataFrame with aligned arrays
+    portfolio_df = pd.DataFrame({
+        'ticker': tickers[:n_stocks],
+        'weight': optimized_weights[:n_stocks]
+    })
+    
+    # Add sector information
+    if 'sector' in stock_data.columns:
+        # Create ticker to sector mapping
+        ticker_to_sector = dict(zip(sector_data['ticker'], sector_data['sector']))
+        portfolio_df['sector'] = portfolio_df['ticker'].map(ticker_to_sector)
+    else:
+        # Use numeric sector IDs if sector names not available
+        portfolio_df['sector_id'] = sectors_array[:n_stocks]
+        portfolio_df['sector'] = portfolio_df['sector_id'].map(lambda x: sector_dict.get(x, f"Sector {x}"))
+        portfolio_df = portfolio_df.drop('sector_id', axis=1)
+    
+    # Sort by weight descending (absolute value)
+    portfolio_df['abs_weight'] = portfolio_df['weight'].abs()
+    portfolio_df = portfolio_df.sort_values('abs_weight', ascending=False)
+    portfolio_df = portfolio_df.drop('abs_weight', axis=1)
+    
+    print("\nPortfolio DataFrame (Top 10 positions by weight):")
+    print(portfolio_df.head(10))
+    
+    # Save the DataFrame to CSV
+    portfolio_df.to_csv('portfolio_weights.csv', index=False)
