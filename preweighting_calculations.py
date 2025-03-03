@@ -146,4 +146,6 @@ def get_preweighting_data():
     print(f"- Beta values: {betas_array.min():.4f} to {betas_array.max():.4f}")
     print(f"- Unique sectors: {len(np.unique(sectors_array))}")
 
-    return expected_returns_array, cov_matrix_array, betas_array, sectors_array
+
+
+    return stock_data, expected_returns_array, cov_matrix_array, betas_array, sectors_array
