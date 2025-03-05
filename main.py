@@ -8,7 +8,7 @@ import numpy as np
 
 stock_data, expected_returns, cov_matrix, betas, sectors_array = get_preweighting_data()
 results = []
-for i in range(1, 40):
+for i in range(1, 100):
     target_annual_risk = i/1000
     portfolio_df, status = get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sectors_array, target_annual_risk)
     ann_return = backtest(stock_data, portfolio_df)

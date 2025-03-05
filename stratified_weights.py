@@ -31,11 +31,11 @@ def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sect
         
         sector_proportions[sector_id] = len(indices) / n # Calculate proportion of stocks in this sector
 
-    print("\nSector Distribution:")
+    # print("\nSector Distribution:")
     for sector_id in unique_sectors:
         stock_count = len(sector_indices[sector_id])
         proportion = sector_proportions[sector_id] * 100
-        print(f"Sector {sector_id}: {stock_count} stocks ({proportion:.2f}%)")
+        # print(f"Sector {sector_id}: {stock_count} stocks ({proportion:.2f}%)")
 
 
     w = cp.Variable(n)  # Stock weights
@@ -51,8 +51,8 @@ def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sect
         cp.norm(cp.sum(cp.multiply(betas, w)), 2) <= epsilon,  # Beta neutrality with slack
         cp.norm(cov_chol @ w, 2) <= target_risk,  # SOC formulation of risk constraint
         cp.norm(w, 1) <= 2,  # Gross exposure limit (100% long, 100% short)
-        w >= -0.1,  # Short position limit
-        w <= 0.1  # Long position limit
+        w >= -0.2,  # Short position limit
+        w <= 0.2  # Long position limit
     ]
 
     # Add sector-specific constraints
@@ -72,7 +72,7 @@ def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sect
     try:
         # Try SCS with better parameters
         problem = cp.Problem(objective, constraints)
-        problem.solve(solver=cp.SCS, eps=1e-8, max_iters=25000, alpha=1.8)
+        problem.solve(solver=cp.SCS, eps=1e-8, max_iters=10000000000, alpha=1.8)
         print("Solved with SCS using improved parameters")
     except Exception as e:
         print(f"SCS solver failed: {e}")
@@ -102,7 +102,7 @@ def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sect
         optimized_weights = w.value
         print("\nOptimization successful!")
         print("Status:", problem.status)
-        print("Optimized weights:", optimized_weights)
+        # print("Optimized weights:", optimized_weights)
         
         # Calculate the long and short positions
         long_positions = np.sum(optimized_weights[optimized_weights > 0])
@@ -119,24 +119,24 @@ def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sect
         annual_sharpe = annual_return / annual_volatility
         
         # Verification
-        print("\nVerification:")
-        print(f"Sum of weights (dollar neutrality, should be 0): {np.sum(optimized_weights):.8f}")
-        print(f"Long positions: {long_positions:.6f}")
-        print(f"Short positions: {short_positions:.6f}")
-        print(f"Beta neutrality (should be 0): {np.sum(betas * optimized_weights):.8f}")
-        print(f"Expected return: {expected_daily_returns:.6f} ({100 * expected_daily_returns:.6f} %) per day")
-        print(f"Portfolio variance: {portfolio_variance:.6f}")
-        print(f"Portfolio volatility: {portfolio_volatility:.6f}")
-        print(f"Target volatility: {target_risk:.6f}")
-        print(f"Gross exposure: {np.sum(np.abs(optimized_weights)):.6f}")
+        # print("\nVerification:")
+        # print(f"Sum of weights (dollar neutrality, should be 0): {np.sum(optimized_weights):.8f}")
+        # print(f"Long positions: {long_positions:.6f}")
+        # print(f"Short positions: {short_positions:.6f}")
+        # print(f"Beta neutrality (should be 0): {np.sum(betas * optimized_weights):.8f}")
+        # print(f"Expected return: {expected_daily_returns:.6f} ({100 * expected_daily_returns:.6f} %) per day")
+        # print(f"Portfolio variance: {portfolio_variance:.6f}")
+        # print(f"Portfolio volatility: {portfolio_volatility:.6f}")
+        # print(f"Target volatility: {target_risk:.6f}")
+        # print(f"Gross exposure: {np.sum(np.abs(optimized_weights)):.6f}")
         
-        print("\nAnnualised Metrics:")
-        print(f"Annual expected return: {annual_return:.6f} ({100 * annual_return:.2f}%)")
-        print(f"Annual volatility: {annual_volatility:.6f} ({100 * annual_volatility:.2f}%)")
-        print(f"Annual Sharpe ratio: {annual_sharpe:.4f}")
+        # print("\nAnnualised Metrics:")
+        # print(f"Annual expected return: {annual_return:.6f} ({100 * annual_return:.2f}%)")
+        # print(f"Annual volatility: {annual_volatility:.6f} ({100 * annual_volatility:.2f}%)")
+        # print(f"Annual Sharpe ratio: {annual_sharpe:.4f}")
         
         # Sector-wise analysis
-        print("\nSector-wise Analysis:")
+        # print("\nSector-wise Analysis:")
         for sector_id in unique_sectors:
             indices = sector_indices[sector_id]
             sector_weights = optimized_weights[indices]
@@ -145,13 +145,13 @@ def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sect
             sector_exposure = np.sum(np.abs(sector_weights))
             max_allowed = sector_proportions[sector_id] * 2
             
-            print(f"\nSector {sector_id}:")
-            print(f"  Number of stocks: {len(indices)}")
-            print(f"  Sum of weights (should be 0): {np.sum(sector_weights):.8f}")
-            print(f"  Long positions: {sector_long_positions:.6f}")
-            print(f"  Short positions: {sector_short_positions:.6f}")
-            print(f"  Gross exposure: {sector_exposure:.6f} (max allowed: {max_allowed:.6f})")
-            print(f"  Exposure constraint satisfied: {sector_exposure <= max_allowed + 1e-6}")
+            # print(f"\nSector {sector_id}:")
+            # print(f"  Number of stocks: {len(indices)}")
+            # print(f"  Sum of weights (should be 0): {np.sum(sector_weights):.8f}")
+            # print(f"  Long positions: {sector_long_positions:.6f}")
+            # print(f"  Short positions: {sector_short_positions:.6f}")
+            # print(f"  Gross exposure: {sector_exposure:.6f} (max allowed: {max_allowed:.6f})")
+            # print(f"  Exposure constraint satisfied: {sector_exposure <= max_allowed + 1e-6}")
 
     else:
         print("Optimization failed with status:", problem.status)
@@ -163,10 +163,10 @@ def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sect
         num_short = np.sum(optimized_weights < -0.001)  # Positions < -0.1%
         num_neutral = np.sum(np.abs(optimized_weights) <= 0.001)  # Near-zero positions
         
-        print("\nPortfolio Structure:")
-        print(f"Number of long positions (>0.1%): {num_long}")
-        print(f"Number of short positions (<-0.1%): {num_short}")
-        print(f"Number of near-zero positions: {num_neutral}")
+        # print("\nPortfolio Structure:")
+        # print(f"Number of long positions (>0.1%): {num_long}")
+        # print(f"Number of short positions (<-0.1%): {num_short}")
+        # print(f"Number of near-zero positions: {num_neutral}")
         
         # Calculate dollar-neutrality deviation
         print(f"Dollar-neutrality deviation: {np.abs(long_positions + short_positions):.8f}")
@@ -174,15 +174,15 @@ def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sect
         # Calculate correlation with market factors
         if np.std(betas @ optimized_weights) > 0:
             market_correlation = np.corrcoef(betas, optimized_weights)[0,1]
-            print(f"Correlation with market factor: {market_correlation:.8f}")
+            # print(f"Correlation with market factor: {market_correlation:.8f}")
         
         # Print constraint satisfaction levels
-        print("\nConstraint Verification:")
-        print(f"Dollar neutrality error: {np.abs(np.sum(optimized_weights)):.8f}")
-        print(f"Beta neutrality error: {np.abs(np.sum(betas * optimized_weights)):.8f}")
-        print(f"Risk constraint: {portfolio_volatility:.6f} <= {target_risk:.6f} is {portfolio_volatility <= target_risk + 1e-6}")
-        print(f"Gross exposure: {np.sum(np.abs(optimized_weights)):.6f} <= 2 is {np.sum(np.abs(optimized_weights)) <= 2 + 1e-6}")
-        print(f"Position limits satisfied: {np.all(optimized_weights >= -0.1-1e-6) and np.all(optimized_weights <= 0.1+1e-6)}")
+        # print("\nConstraint Verification:")
+        # print(f"Dollar neutrality error: {np.abs(np.sum(optimized_weights)):.8f}")
+        # print(f"Beta neutrality error: {np.abs(np.sum(betas * optimized_weights)):.8f}")
+        # print(f"Risk constraint: {portfolio_volatility:.6f} <= {target_risk:.6f} is {portfolio_volatility <= target_risk + 1e-6}")
+        # print(f"Gross exposure: {np.sum(np.abs(optimized_weights)):.6f} <= 2 is {np.sum(np.abs(optimized_weights)) <= 2 + 1e-6}")
+        # print(f"Position limits satisfied: {np.all(optimized_weights >= -0.1-1e-6) and np.all(optimized_weights <= 0.1+1e-6)}")
         
 
 
@@ -190,9 +190,9 @@ def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sect
     # Create a DataFrame with stock tickers, sectors, and weights
     if problem.status == "optimal" or problem.status == "optimal_inaccurate":
         # First, check the lengths to debug
-        print(f"Number of unique tickers: {len(stock_data['ticker'].unique())}")
-        print(f"Length of sectors_array: {len(sectors_array)}")
-        print(f"Length of optimized_weights: {len(optimized_weights)}")
+        # print(f"Number of unique tickers: {len(stock_data['ticker'].unique())}")
+        # print(f"Length of sectors_array: {len(sectors_array)}")
+        # print(f"Length of optimized_weights: {len(optimized_weights)}")
         
         # Get the correct tickers in the same order as sectors_array and optimized_weights
         # We need to ensure they all have the same length and order
@@ -228,13 +228,13 @@ def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sect
         portfolio_df = portfolio_df.sort_values('abs_weight', ascending=False)
         portfolio_df = portfolio_df.drop('abs_weight', axis=1)
         
-        print("\nPortfolio DataFrame (Top 10 positions by weight):")
-        print(portfolio_df.head(10))
+        # print("\nPortfolio DataFrame (Top 10 positions by weight):")
+        # print(portfolio_df.head(10))
         
         
         # # Save the DataFrame to CSV
         # portfolio_df.to_csv('portfolio_weights.csv', index=False)
         
-        return portfolio_df
+        return portfolio_df, problem.status
 
     return None

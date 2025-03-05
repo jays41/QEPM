@@ -2,6 +2,9 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 
+# Need to fix cov matrices
+# Need to include factors in expected returns
+
 def get_preweighting_data():
     # Load stock data
     stock_data = pd.read_csv(r"QEPM\data\stock_prices.csv")
@@ -11,7 +14,7 @@ def get_preweighting_data():
     # Remove duplicates
     duplicate_check = stock_data.duplicated(subset=['ticker', 'date'], keep=False)
     if duplicate_check.any():
-        print(f"Found {duplicate_check.sum()} duplicate entries. Taking the last entry for each ticker-date pair.")
+        # print(f"Found {duplicate_check.sum()} duplicate entries. Taking the last entry for each ticker-date pair.")
         stock_data = stock_data.drop_duplicates(subset=['ticker', 'date'], keep='last')
 
     # Calculate daily returns
@@ -23,7 +26,7 @@ def get_preweighting_data():
     # Cap extreme returns (e.g., due to stock splits, M&A)
     upper_limit = stock_data['return'].quantile(0.99) * 1.5
     lower_limit = stock_data['return'].quantile(0.01) * 1.5
-    print(f"Capping extreme returns: below {lower_limit:.4f} and above {upper_limit:.4f}")
+    # print(f"Capping extreme returns: below {lower_limit:.4f} and above {upper_limit:.4f}")
     stock_data.loc[stock_data['return'] > upper_limit, 'return'] = upper_limit
     stock_data.loc[stock_data['return'] < lower_limit, 'return'] = lower_limit
 
@@ -35,30 +38,30 @@ def get_preweighting_data():
     
     # Calculate expected returns using EWMA
     lookback_period = 252  # One trading year
-    print(f"Calculating expected returns with EWMA using {lookback_period} day lookback")
+    # print(f"Calculating expected returns with EWMA using {lookback_period} day lookback")
     expected_returns_ewma = returns_pivot.ewm(span=lookback_period).mean().iloc[-1]
     
     # Validate expected returns
     if expected_returns_ewma.isna().any():
-        print(f"Warning: {expected_returns_ewma.isna().sum()} NaN values in expected returns")
+        # print(f"Warning: {expected_returns_ewma.isna().sum()} NaN values in expected returns")
         expected_returns_ewma = expected_returns_ewma.fillna(expected_returns_ewma.median())
     
     # Cap extreme expected returns
     returns_cap = 0.01  # Cap daily expected returns at ±1%
     expected_returns_ewma = expected_returns_ewma.clip(-returns_cap, returns_cap)
-    print(f"Expected returns range: {expected_returns_ewma.min():.4f} to {expected_returns_ewma.max():.4f}")
+    # print(f"Expected returns range: {expected_returns_ewma.min():.4f} to {expected_returns_ewma.max():.4f}")
 
     # Calculate covariance matrix using recent data
     recent_period = min(252, len(returns_pivot))
     recent_returns = returns_pivot.iloc[-recent_period:]
-    print(f"Calculating covariance using {recent_period} most recent days")
+    # print(f"Calculating covariance using {recent_period} most recent days")
     
     # Remove stocks with too many missing values
     missing_threshold = 0.3  # 30%
     missing_pct = recent_returns.isna().mean()
     tickers_to_keep = missing_pct[missing_pct < missing_threshold].index
     if len(tickers_to_keep) < len(recent_returns.columns):
-        print(f"Removing {len(recent_returns.columns) - len(tickers_to_keep)} tickers with >30% missing data")
+        # print(f"Removing {len(recent_returns.columns) - len(tickers_to_keep)} tickers with >30% missing data")
         recent_returns = recent_returns[tickers_to_keep]
         expected_returns_ewma = expected_returns_ewma[tickers_to_keep]
         sector_mapping = sector_mapping[sector_mapping.index.isin(tickers_to_keep)]
@@ -77,7 +80,7 @@ def get_preweighting_data():
     # Ensure covariance matrix is well-conditioned
     min_eigenvalue = np.min(np.linalg.eigvals(cov_matrix))
     if min_eigenvalue < 1e-6:
-        print(f"Adding regularization to covariance matrix (min eigenvalue: {min_eigenvalue:.8f})")
+        # print(f"Adding regularization to covariance matrix (min eigenvalue: {min_eigenvalue:.8f})")
         cov_matrix = cov_matrix + np.eye(len(cov_matrix)) * max(1e-6, 1e-4 * np.trace(cov_matrix)/len(cov_matrix))
     
     # Calculate betas - with improved handling of market data
@@ -85,7 +88,7 @@ def get_preweighting_data():
         # Download market index data
         start_date = returns_pivot.index.min().strftime('%Y-%m-%d')
         end_date = returns_pivot.index.max().strftime('%Y-%m-%d')
-        print(f"Downloading market data from {start_date} to {end_date}")
+        # print(f"Downloading market data from {start_date} to {end_date}")
         market_data = yf.download('^GSPC', start=start_date, end=end_date)
         
         # Calculate market returns
@@ -122,7 +125,7 @@ def get_preweighting_data():
             print(f"Warning: {betas.isna().sum()} NaN and {np.isinf(betas).sum()} infinite beta values")
             betas = betas.replace([np.inf, -np.inf], np.nan).fillna(1.0)
         
-        print(f"Beta range: {betas.min():.4f} to {betas.max():.4f}")
+        # print(f"Beta range: {betas.min():.4f} to {betas.max():.4f}")
     
     except Exception as e:
         print(f"Error calculating betas: {e}")
@@ -139,12 +142,12 @@ def get_preweighting_data():
     sectors_array = sector_mapping.map(sector_dict).values
     
     # Final validation
-    print(f"\nFinal data preparation complete:")
-    print(f"- Assets: {len(expected_returns_array)}")
-    print(f"- Expected returns: {expected_returns_array.min():.4f} to {expected_returns_array.max():.4f}")
-    print(f"- Covariance matrix shape: {cov_matrix_array.shape}")
-    print(f"- Beta values: {betas_array.min():.4f} to {betas_array.max():.4f}")
-    print(f"- Unique sectors: {len(np.unique(sectors_array))}")
+    # print(f"\nFinal data preparation complete:")
+    # print(f"- Assets: {len(expected_returns_array)}")
+    # print(f"- Expected returns: {expected_returns_array.min():.4f} to {expected_returns_array.max():.4f}")
+    # print(f"- Covariance matrix shape: {cov_matrix_array.shape}")
+    # print(f"- Beta values: {betas_array.min():.4f} to {betas_array.max():.4f}")
+    # print(f"- Unique sectors: {len(np.unique(sectors_array))}")
 
 
 
