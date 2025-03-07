@@ -20,3 +20,7 @@ Performance attribution (??)
 Table presentation:
 
     dont forget corr with S&P
+
+look into sector beta neutrality
+
+make it rolling - do expected returns based on a 5 year look back period and weight and then run the backtest on the upcoming year and then move the whole window by one year and do the same thing over and over again
