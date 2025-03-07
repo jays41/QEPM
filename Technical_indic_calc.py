@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-# DAte Parsing
+# Date Parsing
 
 df['MarketDate'] = pd.to_datetime(df['MarketDate'], format='%d/%m/%Y')
 df.sort_values(by=['dscode', 'MarketDate'], inplace=True)
