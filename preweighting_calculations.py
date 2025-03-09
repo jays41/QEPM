@@ -89,15 +89,17 @@ def get_preweighting_data():
         start_date = returns_pivot.index.min().strftime('%Y-%m-%d')
         end_date = returns_pivot.index.max().strftime('%Y-%m-%d')
         # print(f"Downloading market data from {start_date} to {end_date}")
-        market_data = yf.download('^GSPC', start=start_date, end=end_date)
+        market_data = yf.download('^GSPC', start=start_date, end=end_date, auto_adjust=False)
         
         # Calculate market returns
         market_returns = market_data['Adj Close'].pct_change().dropna()
         
         # Align market index with stock returns
         aligned_market = market_returns.reindex(recent_returns.index)
-        if aligned_market.isna().sum() > 0:
-            print(f"Warning: {aligned_market.isna().sum()} missing market data points. Filling with forward fill.")
+        if isinstance(aligned_market, pd.DataFrame):
+            aligned_market = aligned_market.squeeze("columns")
+        if aligned_market.isna().sum().sum() > 0:
+            print(f"Warning: {aligned_market.isna().sum().sum()} missing market data points. Filling with forward fill.")
             aligned_market = aligned_market.fillna(method='ffill').fillna(0)
         
         # Calculate betas using vectorized operations
@@ -148,7 +150,6 @@ def get_preweighting_data():
     # print(f"- Covariance matrix shape: {cov_matrix_array.shape}")
     # print(f"- Beta values: {betas_array.min():.4f} to {betas_array.max():.4f}")
     # print(f"- Unique sectors: {len(np.unique(sectors_array))}")
-
 
 
     return stock_data, expected_returns_array, cov_matrix_array, betas_array, sectors_array
