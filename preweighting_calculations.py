@@ -68,7 +68,7 @@ def get_preweighting_data():
     
     # Fill remaining NaN values
     print(f"Filling {recent_returns.isna().sum().sum()} NaN values in returns data")
-    recent_returns = recent_returns.fillna(method='ffill').fillna(method='bfill').fillna(0)
+    recent_returns = recent_returns.ffill().bfill().fillna(0)
     
     # Compute weighted covariance matrix
     weights = np.exp(np.linspace(-1, 0, recent_period))
@@ -100,7 +100,7 @@ def get_preweighting_data():
             aligned_market = aligned_market.squeeze("columns")
         if aligned_market.isna().sum().sum() > 0:
             print(f"Warning: {aligned_market.isna().sum().sum()} missing market data points. Filling with forward fill.")
-            aligned_market = aligned_market.fillna(method='ffill').fillna(0)
+            aligned_market = aligned_market.ffill().fillna(0)
         
         # Calculate betas using vectorized operations
         common_dates = recent_returns.index.intersection(market_returns.index)
