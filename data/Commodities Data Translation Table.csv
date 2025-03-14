@@ -1,0 +1,35 @@
+Cmdty_Type,Cmdty_Name,Cmdty_Code
+Energy,Crude Oil (WTI),CL1 Comdty
+Energy,Crude Oil (Brent),CO1 Comdty
+Energy,Natural Gas,NG1 Comdty
+Energy,Gasoline (RBOB),XB1 Comdty
+Energy,Heating Oil,HO1 Comdty
+Metals,Gold,GC1 Comdty
+Metals,Silver,SI1 Comdty
+Metals,Copper,HG1 Comdty
+Metals,Platinum,PL1 Comdty
+Metals,Palladium,PA1 Comdty
+Metals,Aluminum,LA1 Comdty
+Metals,Zinc,LX1 Comdty
+Metals,Lead,PB1 Comdty
+Metals,Nickel,LN1 Comdty
+Metals,Tin,SN1 Comdty
+Metals,Iron Ore,TIO1 Comdty
+Metals,Steel Rebar,SR1 Comdty
+Metals,Molybdenum,MO1 Comdty
+Metals,Cobalt,CO1 Comdty
+Agricultural,Corn,C 1 Comdty
+Agricultural,Wheat,W 1 Comdty
+Agricultural,Soybeans,S 1 Comdty
+Agricultural,Rice,RR1 Comdty
+Agricultural,Cotton,CT1 Comdty
+Agricultural,Sugar,SB1 Comdty
+Agricultural,Coffee,KC1 Comdty
+Agricultural,Cocoa,CC1 Comdty
+Agricultural,Barley,FU1 Comdty
+Agricultural,Oats,O 1 Comdty
+Agricultural,Sunflower Oil,KAS1 Comdty
+Agricultural,Palm Oil,KO1 Comdty
+Agricultural,Bloomberg Commodity Index (BCOM),BCOM Index
+Agricultural,S&P GSCI (Goldman Sachs Commodity Index),SPGSCI Index
+Agricultural,CRB Index (Commodity Research Bureau),CRY Index
