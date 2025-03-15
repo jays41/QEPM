@@ -5,7 +5,6 @@ import pandas as pd
 make it rolling - do expected returns based on a 5 year look back period and weight and then run the backtest on the upcoming year
 and then move the whole window by one year and do the same thing over and over again
 '''
-
 target_annual_risk = 0.05
 
 stock_data = pd.read_csv(r"QEPM\data\stock_prices.csv")
