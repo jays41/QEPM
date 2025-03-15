@@ -6,7 +6,7 @@ from datetime import datetime
 from stratified_weights import get_stratified_weights
 from preweighting_calculations import get_preweighting_data
 
-def backtest(stock_data, portfolio_df):
+def backtest_1_year(stock_data, portfolio_df, year_to_test):
     def parse_monthly_price_data(prices_df):
         
         # Drop the gvkey column
@@ -164,8 +164,13 @@ def backtest(stock_data, portfolio_df):
                 else:  # Short position
                     abs_returns[ticker] = (initial_prices[ticker] - portfolio_prices[ticker]) / initial_prices[ticker]
         
-        weights_series = pd.Series(weights, index=tickers)
-        weighted_returns = abs_returns.mul(weights_series, axis='columns')
+        # Apply weights to get portfolio returns
+        weighted_returns = pd.DataFrame()
+        for ticker in tickers:
+            if ticker in abs_returns.columns:
+                idx = tickers.index(ticker)
+                weight = weights[idx]
+                weighted_returns[ticker] = abs_returns[ticker] * weight
         
         # Sum across all tickers to get portfolio returns for each period
         portfolio_absolute_returns = weighted_returns.sum(axis=1)
@@ -216,53 +221,64 @@ def backtest(stock_data, portfolio_df):
         # Load monthly price data
         prices = parse_monthly_price_data(stock_data)
         
-        # Load portfolio weights
-        tickers, weights = parse_portfolio_weights(portfolio_df)
+        # Use the next January 1st as the end date
+        start_date = f"{year_to_test}-01-01"
+        end_date = f"{year_to_test + 1}-01-01"
         
-        # Run backtest
-        # print("Running monthly backtest with absolute returns...")
-        absolute_returns = run_backtest(prices, tickers, weights)
+        prices = prices[(prices.index >= start_date) & (prices.index < end_date)]
         
-        # Plot results only if we have data
-        if not absolute_returns.empty:
-            # plt.figure(figsize=(14, 8))
-            
-            # Plot cumulative returns
-            # plt.plot(absolute_returns.index, absolute_returns.values, marker='o', markersize=4, linestyle='-')
-            # plt.title('Portfolio Absolute Returns (Relative to Initial Buy-in)', fontsize=14)
-            # plt.xlabel('Date', fontsize=12)
-            # plt.ylabel('Absolute Return', fontsize=12)
-            
-            # Format x-axis to show dates more clearly
-            # plt.gcf().autofmt_xdate()
-            
-            # Add grid for better readability
-            # plt.grid(True, linestyle='--', alpha=0.7)
-            
-            # Add horizontal line at y=0
-            # plt.axhline(y=0, color='r', linestyle='-', alpha=0.3)
-            
-            # Add text with performance metrics
-            if len(absolute_returns) > 0:
-                total_return = absolute_returns.iloc[-1]
-                # Calculate annualized return
-                time_period_years = (absolute_returns.index[-1] - absolute_returns.index[0]).days / 365.25
-                ann_return = (1 + total_return) ** (1 / time_period_years) - 1 if time_period_years > 0 else 0
-                
-                # Position text on the plot (adjust as needed)
-                # plt.text(
-                    # 0.02, 0.95, 
-                    # f'Total Return: {total_return*100:.2f}%\nAnn. Return: {ann_return*100:.2f}%', 
-                    # # transform=plt.gca().transAxes,
-                    # bbox=dict(facecolor='white', alpha=0.7)
-                # )
-            
-            # plt.tight_layout()
-            # plt.savefig('absolute_returns_backtest.png')
-            # plt.show()
-            
+        # If filtered prices are empty, set ann_return to 0 immediately
+        if prices.empty:
+            print("No data found for the selected year.")
+            ann_return = 0.0
         else:
-            print("Unable to plot results due to empty return data.")
+            # Load portfolio weights
+            tickers, weights = parse_portfolio_weights(portfolio_df)
+            
+            # Run backtest
+            # print("Running monthly backtest with absolute returns...")
+            absolute_returns = run_backtest(prices, tickers, weights, start_date, end_date)
+            
+            # Plot results only if we have data
+            if absolute_returns.empty:
+                print("Unable to compute return for empty data.")
+                ann_return = 0.0
+            else:
+                # plt.figure(figsize=(14, 8))
+                
+                # Plot cumulative returns
+                # plt.plot(absolute_returns.index, absolute_returns.values, marker='o', markersize=4, linestyle='-')
+                # plt.title('Portfolio Absolute Returns (Relative to Initial Buy-in)', fontsize=14)
+                # plt.xlabel('Date', fontsize=12)
+                # plt.ylabel('Absolute Return', fontsize=12)
+                
+                # Format x-axis to show dates more clearly
+                # plt.gcf().autofmt_xdate()
+                
+                # Add grid for better readability
+                # plt.grid(True, linestyle='--', alpha=0.7)
+                
+                # Add horizontal line at y=0
+                # plt.axhline(y=0, color='r', linestyle='-', alpha=0.3)
+                
+                # Add text with performance metrics
+                if len(absolute_returns) > 0:
+                    total_return = absolute_returns.iloc[-1]
+                    # Calculate annualized return
+                    time_period_years = (absolute_returns.index[-1] - absolute_returns.index[0]).days / 365.25
+                    ann_return = (1 + total_return) ** (1 / time_period_years) - 1 if time_period_years > 0 else 0
+                    
+                    # Position text on the plot (adjust as needed)
+                    # plt.text(
+                        # 0.02, 0.95, 
+                        # f'Total Return: {total_return*100:.2f}%\nAnn. Return: {ann_return*100:.2f}%', 
+                        # # transform=plt.gca().transAxes,
+                        # bbox=dict(facecolor='white', alpha=0.7)
+                    # )
+                
+                # plt.tight_layout()
+                # plt.savefig('absolute_returns_backtest.png')
+                # plt.show()
         
     except Exception as e:
         print(f"Error running backtest: {str(e)}")

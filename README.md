@@ -29,3 +29,7 @@ change beta calculation to just used the saved data in s&p_data.csv
     getting s&p data -> should just write a script to download the data and save it
 
 with the rolling backtest, make it so that stocks are dropped if they don't contain data over the whole 5 year range being looked at
+
+
+estimate betas using GLS estimators for factors
+use factors at time t + 1 to get expected returns at t + 1
