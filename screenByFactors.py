@@ -1,6 +1,8 @@
 # Need the betas to be able to correctly calculate the Z-scores
 
-
+# To do:
+# add econ factors to Z-score calculation
+# use the betas for the factors rather than the raw values
 
 from collections import defaultdict
 import pandas as pd
