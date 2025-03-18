@@ -8,8 +8,7 @@ from statsmodels.tsa.ar_model import AutoReg
 #              DATA SETUP
 # ==========================================
 
-# List of technical factors to include
-technical_factors_of_interest = ['macd_30']
+END_DATE = "2020-01"
 
 # Ensure stock_returns have prct_change
 stock_returns = pd.read_csv(r"data\all_data.csv")
@@ -60,9 +59,7 @@ economic_factor_data = (
 fundamental_factor_data['public_date'] = pd.to_datetime(fundamental_factor_data['public_date']).dt.to_period('M')
 
 # Select relevant columns
-columns_to_keep = ['gvkey', 'public_date', 'CAPEI', 'bm', 'evm', 'pe_op_basic', 'pe_op_dil',
-                   'pe_exi', 'pe_inc', 'ps', 'pcf', 'dpr', 'npm', 'opmbd', 'opmad', 'gpm',
-                   'ptpm', 'cfm', 'roa', 'roe', 'roce', 'efftax', 'aftret_eq', 'aftret_invcapx']
+columns_to_keep = ['gvkey', 'public_date', 'npm', 'opmad', 'gpm', 'ptpm', 'pretret_earnat', 'equity_invcap', 'debt_invcap', 'capital_ratio', 'invt_act', 'rect_act', 'debt_assets', 'debt_capital', 'cash_ratio', 'adv_sale']
 fundamental_factor_data = fundamental_factor_data[columns_to_keep]
 
 # Aggregate fundamental data by 'gvkey' and 'public_date'
@@ -86,7 +83,7 @@ technical_factor_data['date'] = pd.to_datetime(technical_factor_data['date']).dt
 # Group by 'gvkey' and 'date' while taking the mean of technical factors
 technical_factor_data = (
     technical_factor_data
-    .groupby(['gvkey', 'date'])[technical_factors_of_interest]
+    .groupby(['gvkey', 'date'])[['macd_30']]
     .mean()
     .reset_index()
 )
@@ -118,10 +115,9 @@ technical_factor_data = technical_factor_data.merge(
 def get_expected_returns(economic_factor_data: pd.DataFrame, 
                          fundamental_factor_data: pd.DataFrame, 
                          technical_factor_data: pd.DataFrame):
-    
-    technical_factors_of_interest = ['macd_30']
 
-    tau_values, skipped_tau_stocks =  get_taus_momentum(technical_factor_data, technical_factors_of_interest)
+    tau_values, skipped_tau_stocks, av_momentum =  get_taus_momentum(technical_factor_data, END_DATE)
+    tau_values = tau_values.set_index('gvkey')
 
     # ======= ECONOMIC FACTORS ======= #
     economic_betas, skipped_economic_stocks = get_betas(economic_factor_data, 'PeriodDate')
@@ -145,7 +141,7 @@ def get_expected_returns(economic_factor_data: pd.DataFrame,
     # ======= FUNDAMENTAL FACTORS ======= #
     fundamental_betas, skipped_fundamental_stocks = get_betas(fundamental_factor_data, 'date')
     forecasted_fundamental_factors = forecast_factor(fundamental_factor_data, 'date').set_index("ID")
-
+    
     # Ensure fundamental betas are indexed correctly
     fundamental_betas = fundamental_betas.set_index('gvkey').drop(columns=['dropped_rows'])
 
@@ -157,6 +153,8 @@ def get_expected_returns(economic_factor_data: pd.DataFrame,
     # Extract forecasted values and reshape
     forecast_values_fundamental = forecasted_fundamental_factors.loc[common_factors_fundamental, "ForecastValue"].values.reshape(-1, 1)
     beta_matrix_fundamental = fundamental_betas[common_factors_fundamental].values  # Shape (stocks, factors)
+
+    fundamental_betas.to_csv(r"data\fundamental_betas.csv", index = False)
 
     # Perform matrix multiplication
     returns_economic = beta_matrix_economic @ forecasted_values_economic
@@ -171,13 +169,18 @@ def get_expected_returns(economic_factor_data: pd.DataFrame,
     returns_economic = returns_economic.loc[common_gvkeys]
     returns_fundamental = returns_fundamental.loc[common_gvkeys]
 
-    assert returns_economic.shape == returns_fundamental.shape, "Shapes are still mismatched!"
+    expected_returns_df = returns_economic.add(returns_fundamental, fill_value=0)
 
-    expected_returns_df = returns_economic + returns_fundamental
+    common_gvkeys = tau_values.index.intersection(expected_returns_df.index)
+    tau_values = tau_values.loc[common_gvkeys]
+    expected_returns_df = expected_returns_df.loc[common_gvkeys]
 
     pd.set_option('display.float_format', '{:,.6f}'.format)
+    print(expected_returns_df)
+    print(tau_values)
+    print(av_momentum)
 
-    return expected_returns_df, tau_values
+    return expected_returns_df, tau_values, av_momentum
 
 
 def forecast_factor(dataset: pd.DataFrame, date_column_name):
@@ -304,12 +307,11 @@ def get_betas(stock_returns, date_name: str):
     # Convert the betas list into a DataFrame
     betas_df = pd.DataFrame(betas_list, columns=['gvkey', 'dropped_rows'] + factors)
 
-
     return betas_df, skipped_stocks
 
 
 
-def get_taus_momentum(stock_returns, factor_names):
+def get_taus_momentum(stock_returns, end_date, factor_names=['macd_30']):
     """
     Computes taus for technical factors using Pooled OLS regression with fundemental factors.
     
@@ -320,12 +322,15 @@ def get_taus_momentum(stock_returns, factor_names):
     Returns:
     - DataFrame with betas for each stock (gvkey).
     """
-    
+
     # Take the betas from momentum ONLY and return them
     betas_list = []
     skipped_stocks = []
     
     # Loop over each unique gvkey (stock)
+    stock_returns = stock_returns[[col for col in stock_returns.columns if col not in factor_names] + factor_names]
+    factor_average = stock_returns[stock_returns['date'] == end_date][factor_names].mean()
+
     for gvkey in stock_returns['gvkey'].unique():
         # Subset the data for the current stock (gvkey)
         stock_data = stock_returns[stock_returns['gvkey'] == gvkey].copy()
@@ -350,7 +355,7 @@ def get_taus_momentum(stock_returns, factor_names):
         
         # Perform Pooled OLS regression
         model = sm.OLS(y, sm.add_constant(X)).fit()  # Add constant term for the regression
-        betas_of_interest = model.params.values[-len(factor_names):]  # COME BACK HERE _____________________________________________________
+        betas_of_interest = model.params.values[-len(factor_names):]
         
         # Store the betas for the current stock (gvkey)
         betas_list.append([gvkey, dropped_rows] + list(betas_of_interest))
@@ -358,6 +363,9 @@ def get_taus_momentum(stock_returns, factor_names):
     # Convert the betas list into a DataFrame
     taus_df = pd.DataFrame(betas_list, columns=['gvkey', 'dropped_rows'] + factor_names)
 
-    return taus_df, skipped_stocks
+    return taus_df, skipped_stocks, factor_average
 
 get_expected_returns(economic_factor_data, fundamental_factor_data, technical_factor_data)
+
+
+
