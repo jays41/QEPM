@@ -104,6 +104,16 @@ technical_factor_data = technical_factor_data.merge(
 #              EXPECTED RETURNS
 # ===========================================
 
+"""
+ - get_expected_returns(), gets expected returns for economic_factor_data + fundamental_factor_data as df with gvkeys as index
+ - get_betas(), returns with gvkeys as column
+ - gforecast_values(), returns df with:
+        results_df = pd.DataFrame(
+            results_list,
+            columns=["ID", "ChosenLag_BIC", "ForecastValue", "ForecastDate"]
+        )
+ 
+"""
 
 def get_expected_returns(economic_factor_data: pd.DataFrame, 
                          fundamental_factor_data: pd.DataFrame, 
@@ -121,12 +131,9 @@ def get_expected_returns(economic_factor_data: pd.DataFrame,
     economic_betas = economic_betas.set_index('gvkey').drop(columns=['dropped_rows'])
 
     # Align forecasted values with betas
-
     economic_betas.columns = economic_betas.columns.astype(str)
     forecasted_economic_factors.index = forecasted_economic_factors.index.astype(str)
     common_factors_economic = economic_betas.columns.intersection(forecasted_economic_factors.index)
-
-    print("common_factors_economic = ", common_factors_economic)
 
     # Extract forecasted values and reshape for matrix multiplication
     forecasted_values_economic = forecasted_economic_factors.loc[common_factors_economic, "ForecastValue"].values.reshape(-1, 1)
@@ -159,8 +166,6 @@ def get_expected_returns(economic_factor_data: pd.DataFrame,
     returns_economic = pd.DataFrame(returns_economic, index=economic_betas.index, columns=["Expected Return"])
     returns_fundamental = pd.DataFrame(returns_fundamental, index=fundamental_betas.index, columns=["Expected Return"])
 
-    print("ECONOMIC RETURNS \n \n", returns_economic)
-
     # Reshape to make them contain same stocks
     common_gvkeys = returns_economic.index.intersection(returns_fundamental.index)
     returns_economic = returns_economic.loc[common_gvkeys]
@@ -171,8 +176,6 @@ def get_expected_returns(economic_factor_data: pd.DataFrame,
     expected_returns_df = returns_economic + returns_fundamental
 
     pd.set_option('display.float_format', '{:,.6f}'.format)
-
-    print(tau_values)
 
     return expected_returns_df, tau_values
 
