@@ -8,100 +8,98 @@ from statsmodels.tsa.ar_model import AutoReg
 #              DATA SETUP
 # ==========================================
 
+END_DATE = "2020-02"
+
 # List of technical factors to include
-def expected_returns_setup():
-    technical_factors_of_interest = ['macd_30']
+technical_factors_of_interest = ['macd_30']
 
-    # Ensure stock_returns have prct_change
-    stock_returns = pd.read_csv(r"QEPM\data\all_data.csv")
-    technical_factor_data = pd.read_csv(r"QEPM\data\technical_factors.csv")
-    economic_factor_data = pd.read_csv(r"QEPM\data\econ_data.csv")
-    fundamental_factor_data = pd.read_csv(r"QEPM\data\stock_fundamental_data.csv")
+# Ensure stock_returns have prct_change
+stock_returns = pd.read_csv(r"data\all_data.csv")
+technical_factor_data = pd.read_csv(r"data\technical_factors.csv")
+economic_factor_data = pd.read_csv(r"data\econ_data.csv")
+fundamental_factor_data = pd.read_csv(r"data\stock_fundamental_data.csv")
 
-    # Convert daily stock returns to monthly
-    stock_returns['date'] = pd.to_datetime(stock_returns['date'])
-    stock_returns['date'] = stock_returns['date'].dt.to_period('M')
-    stock_returns['returns'] = stock_returns.groupby('gvkey')['close'].pct_change()
-    stock_returns = stock_returns.groupby(['gvkey', 'date'])['returns'].mean().reset_index()
+# Convert daily stock returns to monthly
+stock_returns['date'] = pd.to_datetime(stock_returns['date'])
+stock_returns['date'] = stock_returns['date'].dt.to_period('M')
+stock_returns['returns'] = stock_returns.groupby('gvkey')['close'].pct_change()
+stock_returns = stock_returns.groupby(['gvkey', 'date'])['returns'].mean().reset_index()
 
-    # ECONOMIC FACTOR DATA MANIPULATION
-    economic_factor_data = (
-        economic_factor_data.dropna(subset=['Series_Value'])  # Drops rows where Series_Value is NaN
-        .groupby(['PeriodDate', 'EcoSeriesID'])['Series_Value']
-        .mean()  # You can use sum(), first(), last(), etc.
-        .reset_index()
-    )
+# ECONOMIC FACTOR DATA MANIPULATION
+economic_factor_data = (
+    economic_factor_data.dropna(subset=['Series_Value'])  # Drops rows where Series_Value is NaN
+    .groupby(['PeriodDate', 'EcoSeriesID'])['Series_Value']
+    .mean()  # You can use sum(), first(), last(), etc.
+    .reset_index()
+)
 
-    # Pivot the economic data to wide format
-    economic_factor_data.columns = economic_factor_data.columns.str.strip()
-    economic_factor_data = economic_factor_data.pivot(index='PeriodDate', columns='EcoSeriesID', values='Series_Value')
-    economic_factor_data = economic_factor_data.reset_index()
+# Pivot the economic data to wide format
+economic_factor_data.columns = economic_factor_data.columns.str.strip()
+economic_factor_data = economic_factor_data.pivot(index='PeriodDate', columns='EcoSeriesID', values='Series_Value')
+economic_factor_data = economic_factor_data.reset_index()
 
-    # Merge stock returns with economic_factor_data using one-to-many on date
-    economic_factor_data['PeriodDate'] = pd.to_datetime(economic_factor_data['PeriodDate']).dt.to_period('M')
+# Merge stock returns with economic_factor_data using one-to-many on date
+economic_factor_data['PeriodDate'] = pd.to_datetime(economic_factor_data['PeriodDate']).dt.to_period('M')
 
-    economic_factor_data = (
-        economic_factor_data.groupby(['PeriodDate'])
-        .mean()  # You can use sum(), first(), last(), etc.
-        .reset_index()
-    )
+economic_factor_data = (
+    economic_factor_data.groupby(['PeriodDate'])
+    .mean()  # You can use sum(), first(), last(), etc.
+    .reset_index()
+)
 
-    economic_factor_data = stock_returns.merge(economic_factor_data, left_on='date', right_on='PeriodDate', how='left')
+economic_factor_data = stock_returns.merge(economic_factor_data, left_on='date', right_on='PeriodDate', how='left')
 
-    economic_factor_data = (
-        economic_factor_data.groupby(['PeriodDate', 'gvkey'])
-        .mean()  # You can use sum(), first(), last(), etc.
-        .reset_index()
-    )
-    
-    econ_factors = ['gvkey', 'PeriodDate', 200380, 592, 598, 2177, 134896, 202661, 202664, 202811, 202813, 201723, 137439, 148429, 202074, 202600, 202605]
-    economic_factor_data = economic_factor_data[econ_factors]
+economic_factor_data = (
+    economic_factor_data.groupby(['PeriodDate', 'gvkey'])
+    .mean()  # You can use sum(), first(), last(), etc.
+    .reset_index()
+)
 
-    # Fill missing data for fundamental factors using forward and backward fill
-    # fundamental_factor_data = fundamental_factor_data.fillna(method='ffill').fillna(method='bfill')
+# Fill missing data for fundamental factors using forward and backward fill
+# fundamental_factor_data = fundamental_factor_data.fillna(method='ffill').fillna(method='bfill')
 
-    # Convert 'public_date' to datetime format (ensuring consistency)
-    fundamental_factor_data['public_date'] = pd.to_datetime(fundamental_factor_data['public_date']).dt.to_period('M')
+# Convert 'public_date' to datetime format (ensuring consistency)
+fundamental_factor_data['public_date'] = pd.to_datetime(fundamental_factor_data['public_date']).dt.to_period('M')
 
-    # Select relevant columns
-    columns_to_keep = ['gvkey', 'public_date', 'npm', 'opmad', 'gpm', 'ptpm', 'pretret_earnat', 'equity_invcap', 'debt_invcap', 'capital_ratio', 'invt_act', 'rect_act', 'debt_assets', 'debt_capital', 'cash_ratio', 'adv_sale']
-    fundamental_factor_data = fundamental_factor_data[columns_to_keep]
+# Select relevant columns
+columns_to_keep = ['gvkey', 'public_date', 'CAPEI', 'bm', 'evm', 'pe_op_basic', 'pe_op_dil',
+                   'pe_exi', 'pe_inc', 'ps', 'pcf', 'dpr', 'npm', 'opmbd', 'opmad', 'gpm',
+                   'ptpm', 'cfm', 'roa', 'roe', 'roce', 'efftax', 'aftret_eq', 'aftret_invcapx']
+fundamental_factor_data = fundamental_factor_data[columns_to_keep]
 
-    # Aggregate fundamental data by 'gvkey' and 'public_date'
-    fundamental_factor_data = (
-        fundamental_factor_data.groupby(['public_date', 'gvkey'])
-        .mean()  # You can replace with sum(), first(), etc.
-        .reset_index()
-    )
+# Aggregate fundamental data by 'gvkey' and 'public_date'
+fundamental_factor_data = (
+    fundamental_factor_data.groupby(['public_date', 'gvkey'])
+    .mean()  # You can replace with sum(), first(), etc.
+    .reset_index()
+)
 
-    # Merge stock_returns with fundamental factors
-    fundamental_factor_data = stock_returns.merge(
-        fundamental_factor_data,
-        left_on=['date', 'gvkey'],
-        right_on=['public_date', 'gvkey'],
-        how='left'
-    ).drop(columns=['public_date'])  # Drop duplicate column
+# Merge stock_returns with fundamental factors
+fundamental_factor_data = stock_returns.merge(
+    fundamental_factor_data,
+    left_on=['date', 'gvkey'],
+    right_on=['public_date', 'gvkey'],
+    how='left'
+).drop(columns=['public_date'])  # Drop duplicate column
 
-    # Convert 'date' to Period('M') format
-    technical_factor_data['date'] = pd.to_datetime(technical_factor_data['date']).dt.to_period('M')
+# Convert 'date' to Period('M') format
+technical_factor_data['date'] = pd.to_datetime(technical_factor_data['date']).dt.to_period('M')
 
-    # Group by 'gvkey' and 'date' while taking the mean of technical factors
-    technical_factor_data = (
-        technical_factor_data
-        .groupby(['gvkey', 'date'])[technical_factors_of_interest]
-        .mean()
-        .reset_index()
-    )
+# Group by 'gvkey' and 'date' while taking the mean of technical factors
+technical_factor_data = (
+    technical_factor_data
+    .groupby(['gvkey', 'date'])[technical_factors_of_interest]
+    .mean()
+    .reset_index()
+)
 
-    # Merge technical factors with fundamental factors correctly
-    technical_factor_data = technical_factor_data.merge(
-        fundamental_factor_data,  
-        left_on=['gvkey', 'date'], 
-        right_on=['gvkey', 'date'],  
-        how='left'
-    )
-    
-    return stock_returns, economic_factor_data, fundamental_factor_data, technical_factor_data
+# Merge technical factors with fundamental factors correctly
+technical_factor_data = technical_factor_data.merge(
+    fundamental_factor_data,  
+    left_on=['gvkey', 'date'], 
+    right_on=['gvkey', 'date'],  
+    how='left'
+)
 
 
 # ===========================================
@@ -122,9 +120,10 @@ def expected_returns_setup():
 def get_expected_returns(economic_factor_data: pd.DataFrame, 
                          fundamental_factor_data: pd.DataFrame, 
                          technical_factor_data: pd.DataFrame):
+    
+    technical_factors_of_interest = ['macd_30']
 
-    tau_values, skipped_tau_stocks, av_momentum =  get_taus_momentum(technical_factor_data, END_DATE)
-    tau_values = tau_values.set_index('gvkey')
+    tau_values, skipped_tau_stocks, av_momentum =  get_taus_momentum(technical_factor_data, technical_factors_of_interest, END_DATE)
 
     # ======= ECONOMIC FACTORS ======= #
     economic_betas, skipped_economic_stocks = get_betas(economic_factor_data, 'PeriodDate')
@@ -148,6 +147,8 @@ def get_expected_returns(economic_factor_data: pd.DataFrame,
     # ======= FUNDAMENTAL FACTORS ======= #
     fundamental_betas, skipped_fundamental_stocks = get_betas(fundamental_factor_data, 'date')
     forecasted_fundamental_factors = forecast_factor(fundamental_factor_data, 'date').set_index("ID")
+
+    print("FUNDAMENTAL BETAS: \n \n", fundamental_betas)
     
     # Ensure fundamental betas are indexed correctly
     fundamental_betas = fundamental_betas.set_index('gvkey').drop(columns=['dropped_rows'])
@@ -161,7 +162,13 @@ def get_expected_returns(economic_factor_data: pd.DataFrame,
     forecast_values_fundamental = forecasted_fundamental_factors.loc[common_factors_fundamental, "ForecastValue"].values.reshape(-1, 1)
     beta_matrix_fundamental = fundamental_betas[common_factors_fundamental].values  # Shape (stocks, factors)
 
-    fundamental_betas.to_csv(r"data\fundamental_betas.csv", index = False)
+    print(beta_matrix_fundamental)
+
+    print("NaN in beta_matrix_fundamental:", np.isnan(beta_matrix_fundamental).sum())
+    print("NaN in forecast_values_fundamental:", np.isnan(forecast_values_fundamental).sum())
+
+    print("Inf in beta_matrix_fundamental:", np.isinf(beta_matrix_fundamental).sum())
+    print("Inf in forecast_values_fundamental:", np.isinf(forecast_values_fundamental).sum())
 
     # Perform matrix multiplication
     returns_economic = beta_matrix_economic @ forecasted_values_economic
@@ -171,21 +178,19 @@ def get_expected_returns(economic_factor_data: pd.DataFrame,
     returns_economic = pd.DataFrame(returns_economic, index=economic_betas.index, columns=["Expected Return"])
     returns_fundamental = pd.DataFrame(returns_fundamental, index=fundamental_betas.index, columns=["Expected Return"])
 
+    print("ECONOMIC RETURNS: \n \n", returns_economic)
+
     # Reshape to make them contain same stocks
     common_gvkeys = returns_economic.index.intersection(returns_fundamental.index)
     returns_economic = returns_economic.loc[common_gvkeys]
     returns_fundamental = returns_fundamental.loc[common_gvkeys]
 
-    expected_returns_df = returns_economic.add(returns_fundamental, fill_value=0)
+    assert returns_economic.shape == returns_fundamental.shape, "Shapes are still mismatched!"
 
-    common_gvkeys = tau_values.index.intersection(expected_returns_df.index)
-    tau_values = tau_values.loc[common_gvkeys]
-    expected_returns_df = expected_returns_df.loc[common_gvkeys]
+    expected_returns_df = returns_economic + returns_fundamental
 
     pd.set_option('display.float_format', '{:,.6f}'.format)
     print(expected_returns_df)
-    print(tau_values)
-    print(av_momentum)
 
     return expected_returns_df, tau_values, av_momentum
 
@@ -318,7 +323,7 @@ def get_betas(stock_returns, date_name: str):
 
 
 
-def get_taus_momentum(stock_returns, end_date, factor_names=['macd_30']):
+def get_taus_momentum(stock_returns, factor_names, end_date):
     """
     Computes taus for technical factors using Pooled OLS regression with fundemental factors.
     
@@ -372,4 +377,4 @@ def get_taus_momentum(stock_returns, end_date, factor_names=['macd_30']):
 
     return taus_df, skipped_stocks, factor_average
 
-# get_expected_returns(economic_factor_data, fundamental_factor_data, technical_factor_data)
+get_expected_returns(economic_factor_data, fundamental_factor_data, technical_factor_data)
