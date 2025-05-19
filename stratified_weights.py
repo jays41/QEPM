@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import cvxpy as cp
 
-def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sectors_array, target_annual_risk=0.01):
+def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sectors_array, target_annual_risk=0.05):
     n = len(expected_returns)
 
     # daily
