@@ -107,7 +107,11 @@ def get_preweighting_data():
         if len(common_dates) < 0.7 * recent_period:
             print(f"Warning: Only {len(common_dates)} common dates for beta calculation (expected {recent_period})")
         
-        # Calculate betas for each stock
+        # Calculate CAPM betas for each stock
+        # cov(Ri, Rm) / Var(Rm)
+        # Where:
+        #   Ri = return of an individual stock
+        #   Rm = return of the market index
         betas = {}
         market_var = aligned_market.var()
         if market_var <= 0:

@@ -11,6 +11,7 @@ results = []
 for i in range(1, 100):
     target_annual_risk = i/1000
     portfolio_df, status = get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sectors_array, target_annual_risk)
+    print(portfolio_df)
     ann_return = backtest(stock_data, portfolio_df)
     print(f'With a target annual risk of {target_annual_risk}, annual return was {ann_return}')
     results.append([target_annual_risk, ann_return, status])
