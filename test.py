@@ -2,8 +2,7 @@ from get_5_year_preweighting_data import get_5_year_preweighting_data
 import pandas as pd
 
 '''
-make it rolling - do expected returns based on a 5 year look back period and weight and then run the backtest on the upcoming year
-and then move the whole window by one year and do the same thing over and over again
+to delete
 '''
 target_annual_risk = 0.05
 
