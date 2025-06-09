@@ -2,24 +2,7 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 
-def get_preweighting_data(expected_returns_df: pd.DataFrame):
-    """
-    Prepares data for portfolio optimization.
-
-    Parameters:
-        expected_returns_df (pd.DataFrame): DataFrame with columns ['gvkey', 'Expected Return'].
-
-    Returns:
-        stock_data (pd.DataFrame): Original stock data with returns and adjustments.
-        expected_returns (pd.Series): Expected returns indexed by gvkey.
-        cov_matrix (pd.DataFrame): Covariance matrix of returns.
-        betas (pd.Series): CAPM betas indexed by gvkey.
-        sectors (pd.Series): Sector mapping indexed by gvkey.
-    """
-    
-    
-     # Debugging: Check the structure of expected_returns_df
-    print("Columns in expected_returns_df:", expected_returns_df.columns)
+def get_preweighting_data(expected_returns_df: pd.DataFrame, start_date, end_date):
 
     # Ensure 'gvkey' column exists
     if 'gvkey' not in expected_returns_df.columns:
@@ -41,6 +24,15 @@ def get_preweighting_data(expected_returns_df: pd.DataFrame):
 
     # Remove duplicates
     stock_data = stock_data.drop_duplicates(subset=['ticker', 'date'], keep='last')
+    
+    # check tickers that were there on start_date (set) and remove any others
+    stock_data = stock_data[(stock_data['date'] >= start_date) & (stock_data['date'] <= end_date)]
+    # get min date
+    min_date = stock_data['date'].min()
+    # find unique gvkeys on that date
+    gvkeys_on_min_date = set(stock_data[stock_data['date'] == min_date]['gvkey'])
+    # keep only those in contention
+    stock_data = stock_data[stock_data['gvkey'].isin(gvkeys_on_min_date)]
 
     # Calculate daily returns
     stock_data['return'] = stock_data.groupby('ticker')['close'].pct_change()
@@ -105,7 +97,11 @@ def get_preweighting_data(expected_returns_df: pd.DataFrame):
     try:
         start_date = returns_pivot.index.min().strftime('%Y-%m-%d')
         end_date = returns_pivot.index.max().strftime('%Y-%m-%d')
-        market_data = yf.download('^GSPC', start=start_date, end=end_date, auto_adjust=False)
+        market_data = pd.read_csv(r"QEPM\data\s&p_data.csv")
+        market_data['Date'] = pd.to_datetime(market_data['Date'])
+        market_data = market_data[(market_data['Date'] >= start_date) & (market_data['Date'] <= end_date)]
+        market_data = market_data.set_index('Date')
+        # market_data = yf.download('^GSPC', start=start_date, end=end_date, auto_adjust=False) # save values to file and just pick out to prevent errors arising from being rate limited by YFinance
         market_returns = market_data['Adj Close'].pct_change().dropna()
         aligned_market = market_returns.reindex(recent_returns.index).fillna(0)
 
@@ -128,5 +124,7 @@ def get_preweighting_data(expected_returns_df: pd.DataFrame):
     # Map sectors to numeric values
     sector_dict = {sector: i for i, sector in enumerate(sector_mapping.unique())}
     sectors = sector_mapping.map(sector_dict)
-
+    
+    # print(f"betas:\n{betas}")
+    
     return stock_data, expected_returns, cov_matrix, betas, sectors
