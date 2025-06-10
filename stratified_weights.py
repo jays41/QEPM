@@ -5,14 +5,7 @@ import cvxpy as cp
 def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sectors_array, target_annual_risk=0.05):
     n = len(expected_returns)
 
-    # daily
-    # target_risk = 0.01
-
-    # annual
-    # target_annual_risk = 0.01
     target_risk = (1 + target_annual_risk)**(1/252) - 1
-
-
 
     # Small tolerance for equality constraints
     epsilon = 1e-6
@@ -73,29 +66,29 @@ def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sect
         # Try SCS with better parameters
         problem = cp.Problem(objective, constraints)
         problem.solve(solver=cp.SCS, eps=1e-8, max_iters=10000000000, alpha=1.8)
-        print("Solved with SCS using improved parameters")
+        # print("Solved with SCS using improved parameters")
     except Exception as e:
-        print(f"SCS solver failed: {e}")
+        # print(f"SCS solver failed: {e}")
         try:
             # Try OSQP if SCS fails
             problem = cp.Problem(objective, constraints)
             problem.solve(solver=cp.OSQP, eps_abs=1e-8, eps_rel=1e-8, max_iter=10000)
-            print("Solved with OSQP")
+            # print("Solved with OSQP")
         except Exception as e:
-            print(f"OSQP solver failed: {e}")
+            # print(f"OSQP solver failed: {e}")
             try:
                 # Try ECOS if OSQP fails
                 problem = cp.Problem(objective, constraints)
                 problem.solve(solver=cp.ECOS, abstol=1e-8, reltol=1e-8, max_iters=1000)
-                print("Solved with ECOS")
+                # print("Solved with ECOS")
             except Exception as e:
-                print(f"ECOS solver failed: {e}")
+                # print(f"ECOS solver failed: {e}")
                 print("All standard solvers failed. Trying alternative approach.")
                 
                 # Final attempt with CVXOPT with better parameters
                 problem = cp.Problem(objective, constraints)
                 problem.solve(solver=cp.CVXOPT, abstol=1e-8, reltol=1e-8)
-                print("Solved with CVXOPT using improved parameters")
+                # print("Solved with CVXOPT using improved parameters")
 
     # Output optimized weights
     if problem.status == "optimal" or problem.status == "optimal_inaccurate":
@@ -114,6 +107,13 @@ def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sect
         
         # Calculating annual expected returns
         expected_daily_returns = np.sum(expected_returns * optimized_weights)
+        
+        print("expected_daily_returns:", expected_daily_returns)
+        print("expected_returns (min, max):", np.min(expected_returns), np.max(expected_returns))
+        print("optimized_weights (min, max):", np.min(optimized_weights), np.max(optimized_weights))
+        if expected_daily_returns < -1 or expected_daily_returns > 1:
+            print("Warning: expected_daily_returns is outside typical range!")
+        
         annual_return = (1 + expected_daily_returns) ** 252 - 1
         annual_volatility = portfolio_volatility * np.sqrt(252)
         annual_sharpe = annual_return / annual_volatility
