@@ -125,19 +125,8 @@ def backtest(lookback_start_month, lookback_start_year, lookback_end_month, look
     invest_start = pd.Timestamp(f"{invest_start_year}-{invest_start_month}-01")
     invest_end = pd.Timestamp(f"{invest_end_year}-{invest_end_month}-01") + pd.offsets.MonthEnd(0)
 
-    # get sam's expected return
-    # filter the data according to the year
-    # Create a filtered version of technical_factor_data
-    # Filter the data for the specified date range
-    # technical_factor_data_to_use = technical_factor_data[(technical_factor_data['date'] >= start_date) & (technical_factor_data['date'] <= end_date)]
-    # economic_factor_data_to_use = economic_factor_data[(economic_factor_data['PeriodDate'] >= start_date) & (economic_factor_data['PeriodDate'] <= end_date)]
-    # fundamental_factor_data_to_use = fundamental_factor_data[(fundamental_factor_data['date'] >= start_date) & (fundamental_factor_data['date'] <= end_date)]
-
-    # expected_returns_df, tau_values, av_momentum = get_expected_returns(economic_factor_data, fundamental_factor_data, technical_factor_data, end_date_for_expected_returns)
-    # print('Calculated expected returns')
-
+    
     # get betas and cov matrices
-    ##### expected_returns_df = pd.read_csv(r"QEPM\exret\returns_ending_2020_12.csv")
     expected_returns_df = get_expected_returns_ending(end_date_for_expected_returns) # CHECK THAT IT ONLY DOES lookback_period NUMBER OF MONTHS BEFORE
     expected_returns_df = expected_returns_df.reset_index()
 
@@ -150,17 +139,8 @@ def backtest(lookback_start_month, lookback_start_year, lookback_end_month, look
     portfolio_df, problem_status = get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sectors, target_annual_risk)
     # print(portfolio_df)
     print('Optimised weights')
-    # portfolio_df.to_csv(r"QEPM\results\results_2020_12.csv", index=False)
-    # calculate returns from raw price change multiplied by weight and sum for all stocks in the portfolio
 
-    # start_date = price_data[
-    #     (price_data['date'].dt.year == int(start_year)) & (price_data['date'].dt.month == int(start_month))
-    # ]['date'].min()
-    # end_date = price_data[
-    #     (price_data['date'].dt.year == int(end_year)) & (price_data['date'].dt.month == int(end_month))
-    # ]['date'].max()
 
-    # for each ticker
     price_data['date'] = pd.to_datetime(price_data['date'])
     actual_invest_start_date = price_data[price_data['date'] >= invest_start]['date'].min()
     # Find the last trading date on or before invest_end_date
@@ -168,23 +148,16 @@ def backtest(lookback_start_month, lookback_start_year, lookback_end_month, look
     start_prices = price_data[price_data['date'] == actual_invest_start_date].set_index('gvkey')['close']
     end_prices = price_data[price_data['date'] == actual_invest_end_date].set_index('gvkey')['close']
 
-    # portfolio_df['gvkey'] = portfolio_df['ticker'].astype(int)  # Assuming ticker is gvkey
     stock_prices = pd.read_csv(r"QEPM/data/stock_prices.csv")
 
-    # Create a unique gvkey-ticker mapping
     translation_table = stock_prices[['gvkey', 'ticker']].drop_duplicates()
-
-    # If you want a dictionary for mapping ticker -> gvkey:
     ticker_to_gvkey = translation_table.set_index('ticker')['gvkey'].to_dict()
 
-    # 2. Map tickers in portfolio_df to gvkey
     portfolio_df['gvkey'] = portfolio_df['ticker'].map(ticker_to_gvkey)
 
-    # 3. Drop any rows where gvkey could not be mapped (to avoid NaN indices)
     portfolio_df = portfolio_df.dropna(subset=['gvkey'])
     portfolio_df['gvkey'] = portfolio_df['gvkey'].astype(int)
 
-    # 4. Set gvkey as the index for alignment
     portfolio_df = portfolio_df.set_index('gvkey')
 
     missing_start = set(portfolio_df.index) - set(start_prices.index)
@@ -192,7 +165,6 @@ def backtest(lookback_start_month, lookback_start_year, lookback_end_month, look
     # print("Missing in start_prices:", missing_start)
     # print("Missing in end_prices:", missing_end)
 
-    # portfolio_df = portfolio_df.set_index('gvkey')
     price_change = end_prices - start_prices
     portfolio_df['price_change'] = price_change
     portfolio_df['weighted_return'] = portfolio_df['price_change'] * portfolio_df['weight']
@@ -202,55 +174,14 @@ def backtest(lookback_start_month, lookback_start_year, lookback_end_month, look
     return portfolio_return, problem_status == "optimal"
 
 
-
-
-
-
-# need to tackle issue of gvkeys being delisted:
-#   add rebalancing
-#   calculate price immediately after rebalancing
-
-# filter the dates in get_preweighting_data() which should help with the issue above
-
-
-
-
-
-
 # MAIN
 
-# backtest('01', '2019', '12', '2019', '01', '2020', '12', '2020')  # 1-year lookback, 1-year invest
-
 investment = 100
-
-# print("2020 Investments:")
-# res = backtest('01', '2019', '12', '2019', '01', '2020', '03', '2020')  # 1-year lookback, Q1 invest
-# investment = investment * (1 + res)
-# res = backtest('04', '2019', '03', '2020', '04', '2020', '06', '2020')  # 1-year lookback, Q2 invest
-# investment = investment * (1 + res)
-# res = backtest('07', '2019', '06', '2020', '07', '2020', '09', '2020')  # 1-year lookback, Q3 invest
-# investment = investment * (1 + res)
-# res = backtest('10', '2019', '09', '2020', '10', '2020', '12', '2020')  # 1-year lookback, Q4 invest
-# investment = investment * (1 + res)
-# print(f"Portfolio value = {investment}")
-# print(f"Profit = {investment - 100}")
-
-# print("2021 Investments:")
-# res = backtest('01', '2020', '12', '2020', '01', '2021', '03', '2021')  # 1-year lookback, Q1 invest
-# investment = investment * (1 + res)
-# res = backtest('04', '2020', '03', '2021', '04', '2021', '06', '2021')  # 1-year lookback, Q2 invest
-# investment = investment * (1 + res)
-# res = backtest('07', '2020', '06', '2021', '07', '2021', '09', '2021')  # 1-year lookback, Q3 invest
-# investment = investment * (1 + res)
-# res = backtest('10', '2020', '09', '2021', '10', '2021', '12', '2021')  # 1-year lookback, Q4 invest
-# investment = investment * (1 + res)
-# print(f"Portfolio value = {investment}")
-# print(f"Profit since start of 2020 = {investment - 100}")
 
 investment_values = []
 revival_indices = []
 
-for start_year, end_year in [('2015','2016'), ('2016','2017'), ('2017','2018'), ('2018','2019'), ('2019','2020'), ('2020','2021'), ('2021', '2022'), ('2022', '2023')]:
+for start_year, end_year in [('2014','2016'), ('2015','2017'), ('2016','2018'), ('2017','2019'), ('2018','2020'), ('2019','2021'), ('2020', '2022'), ('2021', '2023')]:
     print(f"{end_year} Investments:")
     res, isOptimal = backtest('01', start_year, '12', start_year, '01', end_year, '03', end_year)  # 1-year lookback, Q1 invest
     if isOptimal:
@@ -287,7 +218,6 @@ print(investment_values)
 
 import matplotlib.pyplot as plt
 
-# Unzip the investment_values into two lists: dates and values
 dates, values = zip(*investment_values)
 
 plt.figure(figsize=(12, 6))
@@ -302,24 +232,9 @@ plt.grid(True)
 for idx in revival_indices:
     plt.axvline(x=dates[idx], color='red', linestyle='--', alpha=0.7, label='Revival' if idx == revival_indices[0] else "")
 
-# Only show one legend entry for 'Revival'
 handles, labels = plt.gca().get_legend_handles_labels()
 if 'Revival' in labels:
     plt.legend()
 
 plt.tight_layout()
 plt.show()
-
-# print("2023 Investments:")
-# res = backtest('01', '2022', '12', '2022', '01', '2023', '03', '2023')  # 1-year lookback, Q1 invest
-# investment = investment * (1 + res)
-# res = backtest('04', '2022', '03', '2023', '04', '2023', '06', '2023')  # 1-year lookback, Q2 invest
-# investment = investment * (1 + res)
-# res = backtest('07', '2022', '06', '2023', '07', '2023', '09', '2023')  # 1-year lookback, Q3 invest
-# investment = investment * (1 + res)
-# res = backtest('10', '2022', '09', '2023', '10', '2023', '12', '2023')  # 1-year lookback, Q4 invest
-# investment = investment * (1 + res)
-# print(f"Portfolio value = {investment}")
-# print(f"Profit since start of 2020 = {investment - 100}")
-
-# backtest('10', '2018', '09', '2019', '10', '2019', '09', '2020')  # 1-year lookback, 1-year invest starting in Oct
