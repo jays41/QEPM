@@ -1,44 +1,63 @@
-from preweighting_calculations import get_preweighting_data
-from stratified_weights import get_stratified_weights
-from backtest import backtest
+from rollingBacktest import backtest
 import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
-import numpy as np
 
+investment = 100
 
-stock_data, expected_returns, cov_matrix, betas, sectors_array = get_preweighting_data()
-results = []
-for i in range(1, 100):
-    target_annual_risk = i/1000
-    portfolio_df, status = get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sectors_array, target_annual_risk)
-    print(portfolio_df)
-    ann_return = backtest(stock_data, portfolio_df)
-    print(f'With a target annual risk of {target_annual_risk}, annual return was {ann_return}')
-    results.append([target_annual_risk, ann_return, status])
+investment_values = []
+revival_indices = []
 
+for start_year, end_year in [('2014','2016'), ('2015','2017'), ('2016','2018'), ('2017','2019'), ('2018','2020'), ('2019','2021'), ('2020', '2022'), ('2021', '2023')]:
+    print(f"{end_year} Investments:")
+    res, isOptimal = backtest('01', start_year, '12', start_year, '01', end_year, '03', end_year)  # 1-year lookback, Q1 invest
+    if isOptimal:
+        investment = investment * (1 + res)
+        if investment <= 0:
+            investment = 100
+            revival_indices.append(len(investment_values))
+    investment_values.append((f"03-{end_year}", investment))
+    res, isOptimal = backtest('04', start_year, '03', end_year, '04', end_year, '06', end_year)  # 1-year lookback, Q2 invest
+    if isOptimal:
+        investment = investment * (1 + res)
+        if investment <= 0:
+            investment = 100
+            revival_indices.append(len(investment_values))
+    investment_values.append((f"06-{end_year}", investment))
+    res, isOptimal = backtest('07', start_year, '06', end_year, '07', end_year, '09', end_year)  # 1-year lookback, Q3 invest
+    if isOptimal:
+        investment = investment * (1 + res)
+        if investment <= 0:
+            investment = 100
+            revival_indices.append(len(investment_values))
+    investment_values.append((f"09-{end_year}", investment))
+    res, isOptimal = backtest('10', start_year, '09', end_year, '10', end_year, '12', end_year)  # 1-year lookback, Q4 invest
+    if isOptimal:
+        investment = investment * (1 + res)
+        if investment <= 0:
+            investment = 100
+            revival_indices.append(len(investment_values))
+    investment_values.append((f"12-{end_year}", investment))
+    print(f"Portfolio value = {investment}")
+    print(f"Profit since start of 2016 = {investment - 100}")
 
-for res in results:
-    print(f'{res[0]}: {res[1]*100}, {res[2]}')
+print(investment_values)
 
+dates, values = zip(*investment_values)
 
-plt.figure(figsize=(10, 6))
-for res in results:
-    risk, ret, status = res
-    color = 'green' if status == 'optimal' else 'red'
-    plt.scatter(risk, ret*100, color=color, s=50)  # Multiply by 100 to show as percentage
+plt.figure(figsize=(12, 6))
+plt.plot(dates, values, marker='o')
+plt.title('Portfolio Value Over Time')
+plt.xlabel('Quarter-End')
+plt.ylabel('Portfolio Value')
+plt.xticks(rotation=45)
+plt.grid(True)
 
-plt.title('Annual Return vs Target Annual Risk')
-plt.xlabel('Target Annual Risk')
-plt.ylabel('Annual Return (%)')
-plt.grid(True, alpha=0.3)
+# Add vertical lines at revival points
+for idx in revival_indices:
+    plt.axvline(x=dates[idx], color='red', linestyle='--', alpha=0.7, label='Revival' if idx == revival_indices[0] else "")
 
+handles, labels = plt.gca().get_legend_handles_labels()
+if 'Revival' in labels:
+    plt.legend()
 
-legend_elements = [
-    Line2D([0], [0], marker='o', color='w', markerfacecolor='green', markersize=10, label='Optimal'),
-    Line2D([0], [0], marker='o', color='w', markerfacecolor='red', markersize=10, label='Non-optimal')
-]
-plt.legend(handles=legend_elements, loc='best')
-
-
-plt.savefig('risk_return_plot.png', dpi=300, bbox_inches='tight')
+plt.tight_layout()
 plt.show()
