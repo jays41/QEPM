@@ -23,8 +23,6 @@ Table presentation:
 
 look into sector beta neutrality
 
-make it rolling - do expected returns based on a 5 year look back period and weight and then run the backtest on the upcoming year and then move the whole window by one year and do the same thing over and over again
-
 change beta calculation to just used the saved data in s&p_data.csv
     getting s&p data -> should just write a script to download the data and save it
 
