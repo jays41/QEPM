@@ -1,4 +1,4 @@
-from rollingBacktest import backtest
+from singleBacktest import backtest
 import matplotlib.pyplot as plt
 
 investment = 100
