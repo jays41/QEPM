@@ -109,7 +109,7 @@ def backtest(lookback_start_month, lookback_start_year, lookback_end_month, look
     screened_stocks_df = get_z_scores_dataframe(
         start_date=start_date,
         end_date=end_date,
-        winsorize_percentile=0.05,  # remove top/bottom 5% outliers
+        winsorise_percentile=0.05,  # remove top/bottom 5% outliers
         top_percentile=0.2          # then select top/bottom 20%
     )
     
