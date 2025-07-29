@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 from get_betas_and_cov_matrix import get_preweighting_data
 from stratified_weights import get_stratified_weights
 from fixed_expected_returns import get_expected_returns_ending
