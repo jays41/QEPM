@@ -4,7 +4,7 @@ import cvxpy as cp
 import statsmodels.api as sm
 from statsmodels.tsa.ar_model import AutoReg
 import warnings
-from typing import Tuple, List, Optional
+from typing import Tuple, List
 import logging
 
 logging.basicConfig(level=logging.INFO)
