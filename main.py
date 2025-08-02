@@ -7,6 +7,8 @@ revival_indices = []
 revival_details = []
 previous_weights = None
 
+target_annual_risk = 0.10
+
 quarters = [
     ('01', '12', '01', '03'),  # Q1: Use Jan-Dec data, invest Q1
     ('04', '03', '04', '06'),  # Q2: Use Apr-Mar data, invest Q2  
@@ -28,6 +30,7 @@ for start_year, end_year in [('2014','2016'), ('2015','2017'), ('2016','2018'), 
             lookback_end_year = end_year
         
         res, isOptimal, current_weights = backtest(
+            target_annual_risk,
             lookback_start_month, lookback_start_year, 
             lookback_end_month, lookback_end_year, 
             invest_start_month, end_year, 
@@ -67,7 +70,7 @@ dates, values = zip(*investment_values)
 
 plt.figure(figsize=(15, 8))
 plt.plot(dates, values, marker='o', linewidth=2, markersize=4)
-plt.title('Portfolio Value Over Time (QEPM Strategy)', fontsize=14)
+plt.title(f'Portfolio Value Over Time (QEPM Strategy) | Alpha ={target_annual_risk * 100}%', fontsize=14)
 plt.xlabel('Quarter-End', fontsize=12)
 plt.ylabel('Portfolio Value (£)', fontsize=12)
 plt.xticks(rotation=45)
