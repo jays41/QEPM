@@ -94,7 +94,7 @@ def calculate_turnover(prev_weights, curr_weights):
     
     return (prev_aligned - curr_aligned).abs().sum()
 
-def backtest(lookback_start_month, lookback_start_year, lookback_end_month, lookback_end_year, invest_start_month, invest_start_year, invest_end_month, invest_end_year, previous_weights=None):
+def backtest(target_annual_risk, lookback_start_month, lookback_start_year, lookback_end_month, lookback_end_year, invest_start_month, invest_start_year, invest_end_month, invest_end_year, previous_weights=None):
     lookback_start = pd.Timestamp(f"{lookback_start_year}-{lookback_start_month}-01")
     lookback_end = pd.Timestamp(f"{lookback_end_year}-{lookback_end_month}-01") + pd.offsets.MonthEnd(0)
     end_date_for_expected_returns = f'{lookback_end_year}-{lookback_end_month}'
@@ -119,10 +119,15 @@ def backtest(lookback_start_month, lookback_start_year, lookback_end_month, look
     screened_stocks = screened_stocks_df['stock'].tolist()
     print(f"Selected {len(screened_stocks)} stocks from screening")
     
-    expected_returns_df = get_expected_returns_ending(end_date_for_expected_returns)
+    expected_returns_df = get_expected_returns_ending(end_date_for_expected_returns, "QEPM/data/")
     expected_returns_df = expected_returns_df.reset_index()
     
     # Filter expected returns to only include screened stocks
+    if 'gvkey' not in expected_returns_df.columns:
+        print("ERROR: 'gvkey' column not found in expected_returns_df!")
+        print(f"Available columns: {expected_returns_df.columns.tolist()}")
+        return 0, False, pd.Series()
+    
     expected_returns_df = expected_returns_df[expected_returns_df['gvkey'].isin(screened_stocks)]
     
     if expected_returns_df.empty:
@@ -138,7 +143,6 @@ def backtest(lookback_start_month, lookback_start_year, lookback_end_month, look
         print(f"Warning: Too few stocks ({len(stock_data)}) for optimization")
         return 0, False, pd.Series()
 
-    target_annual_risk = 0.04
     portfolio_df, problem_status = get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sectors, target_annual_risk)
     print(f'Optimized weights for {len(portfolio_df)} screened stocks')
 
