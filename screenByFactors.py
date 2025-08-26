@@ -57,45 +57,45 @@ def get_factor_beta(stock, factor, factor_type):
     # Choose the appropriate dataframe
     if factor_type == 'fundamental':
         betas_df = fundamental_betas
-        prefix = 'fundamental'
+        factor_prefix = 'fundamental'  # Fixed: use local variable name
     else:  # economic
         betas_df = economic_betas
-        prefix = 'econ'
+        factor_prefix = 'econ'  # Fixed: use local variable name
     
     if betas_df.empty:
-        missing_data_counter[f'{prefix}_{factor}'] += 1
+        missing_data_counter[f'{factor_prefix}_{factor}'] += 1
         return 0, 0, 1
     
     stock_data = betas_df[betas_df['gvkey'] == stock]
     
     if stock_data.empty or factor not in betas_df.columns:
-        missing_data_counter[f'{prefix}_{factor}'] += 1
+        missing_data_counter[f'{factor_prefix}_{factor}'] += 1
         return 0, 0, 1
     
     try:
         last_value = stock_data[factor].iloc[-1]
         if pd.isna(last_value) or np.isinf(last_value):
-            missing_data_counter[f'{prefix}_{factor}'] += 1
+            missing_data_counter[f'{factor_prefix}_{factor}'] += 1
             return 0, 0, 1
             
         # Calculate cross-sectional statistics
         all_betas = betas_df[factor].replace([np.inf, -np.inf], np.nan).dropna()
         
         if len(all_betas) <= 1:
-            missing_data_counter[f'{prefix}_{factor}'] += 1
+            missing_data_counter[f'{factor_prefix}_{factor}'] += 1
             return 0, 0, 1
         
         mean = np.nanmean(all_betas)
         std = np.nanstd(all_betas, ddof=1)
         
         if np.isnan(mean) or np.isnan(std) or std == 0 or np.isinf(std):
-            missing_data_counter[f'{prefix}_{factor}'] += 1
+            missing_data_counter[f'{factor_prefix}_{factor}'] += 1
             return 0, 0, 1
             
         return float(last_value), float(mean), float(std)
         
     except Exception:
-        missing_data_counter[f'{prefix}_{factor}'] += 1
+        missing_data_counter[f'{factor_prefix}_{factor}'] += 1
         return 0, 0, 1
 
 # Wrapper functions for backward compatibility
