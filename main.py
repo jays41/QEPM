@@ -8,6 +8,10 @@ revival_details = []
 previous_weights = None
 
 target_annual_risk = 0.10
+LOOKBACK_YEARS = 2
+
+overall_start_year = 2016
+overall_end_year = 2023
 
 quarters = [
     ('01', '12', '01', '03'),  # Q1: Use Jan-Dec data, invest Q1
@@ -18,12 +22,14 @@ quarters = [
 
 quarter_counter = 0
 
-for start_year, end_year in [('2014','2016'), ('2015','2017'), ('2016','2018'), ('2017','2019'), ('2018','2020'), ('2019','2021'), ('2020', '2022'), ('2021', '2023')]:
+investment_dates = [str(year) for year in range(overall_start_year, overall_end_year + 1)]
+
+for end_year in investment_dates:
     print(f"\n{end_year} Investments:")
     
     for i, (lookback_start_month, lookback_end_month, invest_start_month, invest_end_month) in enumerate(quarters):
         if lookback_start_month == '01' and lookback_end_month == '12':
-            lookback_start_year = str(int(end_year) - 1)
+            lookback_start_year = str(int(end_year) - LOOKBACK_YEARS)
             lookback_end_year = str(int(end_year) - 1)
         else:
             lookback_start_year = str(int(end_year) - 1)
@@ -110,3 +116,5 @@ if years > 0:
     if total_capital_injected > 0:
         true_annualised_return = (investment / total_capital_injected) ** (1/years) - 1
         print(f"True Annualised Return (including revivals): {true_annualised_return * 100:.2f}%")
+        
+## need to plot s&p over this and calculate alpha
