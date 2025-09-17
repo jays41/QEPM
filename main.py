@@ -12,8 +12,8 @@ previous_weights = None
 target_annual_risk = 0.10
 LOOKBACK_YEARS = 2
 
-investment_start_year = 2017
-investment_end_year = 2017
+investment_start_year = 2019
+investment_end_year = 2019
 
 quarters = [
     ('01', '12', '01', '03'),  # Q1: Use Jan-Dec data, invest Q1
@@ -26,6 +26,10 @@ quarter_counter = 0
 
 earliest_possible_start = max(investment_start_year, 2010 + LOOKBACK_YEARS) # data starts from 2010 (as of 12/09/2025)
 investment_dates = [str(year) for year in range(earliest_possible_start, investment_end_year + 1)]
+
+# Add initial investment point at the start date
+initial_date = f"01-{earliest_possible_start}"
+investment_values.append((initial_date, investment))
 
 for end_year in investment_dates:
     print(f"\n{end_year} Investments:")
@@ -60,7 +64,7 @@ for end_year in investment_dates:
                     'quarter': i+1
                 })
                 investment = 100
-                revival_indices.append(len(investment_values))
+                revival_indices.append(len(investment_values) + 1)  # +1 because we'll add the quarter_end after this
                 previous_weights = None  # Reset weights after revival
         else:
             print(f"Warning: Optimisation failed for Q{i+1} {end_year}")
