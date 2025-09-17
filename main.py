@@ -12,8 +12,8 @@ previous_weights = None
 target_annual_risk = 0.10
 LOOKBACK_YEARS = 2
 
-investment_start_year = 2016
-investment_end_year = 2021
+investment_start_year = 2017
+investment_end_year = 2017
 
 quarters = [
     ('01', '12', '01', '03'),  # Q1: Use Jan-Dec data, invest Q1
@@ -88,8 +88,8 @@ for port_date in portfolio_dates:
     month_mask = (sp_values["Date"].dt.year == port_date.year) & (sp_values["Date"].dt.month == port_date.month)
     month_data = sp_values[month_mask]
     if not month_data.empty:
-        # Get the last trading day of that month
-        closest_sp_date = month_data["Date"].max()
+        # Get the first trading day of that month
+        closest_sp_date = month_data["Date"].min()
         closest_sp_price = month_data[month_data["Date"] == closest_sp_date]["Close"].iloc[0]
         sp_aligned.append((closest_sp_date, closest_sp_price))
 
@@ -99,12 +99,18 @@ if sp_aligned:
     # Convert string prices to float
     sp_prices_float = [float(price) for price in sp_prices]
     initial_sp_price = sp_prices_float[0]
-    sp_normalized = [100 * (price / initial_sp_price) for price in sp_prices_float]
+    # sp_normalized = [100 * (price / initial_sp_price) for price in sp_prices_float]
+    sp_normalised = sp_prices_float
+    revival_indices_set = set(revival_indices)
+    for i in range(len(sp_prices_float)):
+        sp_normalised[i] = 100 * (sp_prices_float[i] / initial_sp_price)
+        if i in revival_indices_set:
+            sp_normalised[i] += 100
     
 plt.figure(figsize=(15, 8))
 plt.plot(portfolio_dates, values, marker='o', linewidth=2, markersize=4, label='QEPM Portfolio')
 if sp_aligned:
-    plt.plot(sp_dates, sp_normalized, marker='s', linewidth=2, markersize=3, label='S&P 500')
+    plt.plot(sp_dates, sp_normalised, marker='s', linewidth=2, markersize=3, label='S&P 500')
 plt.title(f'Portfolio Value Over Time (QEPM Strategy) | Alpha ={target_annual_risk * 100}%', fontsize=14)
 plt.xlabel('Quarter-End', fontsize=12)
 plt.ylabel('Portfolio Value (£)', fontsize=12)
