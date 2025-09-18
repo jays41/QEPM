@@ -114,19 +114,29 @@ for port_date in portfolio_dates:
         closest_sp_price = month_data[month_data["Date"] == closest_sp_date]["Close"].iloc[0]
         sp_aligned.append((closest_sp_date, closest_sp_price))
 
-# Convert S&P 500 to percentage returns starting from 100
+# Convert S&P 500 to track same capital injection pattern as portfolio
 if sp_aligned:
     sp_dates, sp_prices = zip(*sp_aligned)
     # Convert string prices to float
     sp_prices_float = [float(price) for price in sp_prices]
-    initial_sp_price = sp_prices_float[0]
-    # sp_normalized = [100 * (price / initial_sp_price) for price in sp_prices_float]
-    sp_normalised = sp_prices_float
+    
+    # Calculate S&P 500 percentage changes
+    sp_pct_changes = [0]  # First period has no change
+    for i in range(1, len(sp_prices_float)):
+        pct_change = (sp_prices_float[i] - sp_prices_float[i-1]) / sp_prices_float[i-1]
+        sp_pct_changes.append(pct_change)
+    
+    # Initialize S&P normalized values starting at 100
+    sp_normalised = [100]  # Start with £100 invested
     revival_indices_set = set(revival_indices)
-    for i in range(len(sp_prices_float)):
-        sp_normalised[i] = 100 * (sp_prices_float[i] / initial_sp_price)
+    
+    for i in range(1, len(sp_prices_float)):
         if i in revival_indices_set:
-            sp_normalised[i] += 100
+            # Revival: add £100 to current S&P value and apply this quarter's return
+            sp_normalised.append(sp_normalised[i-1] + 100 + (100 * sp_pct_changes[i]))
+        else:
+            # Normal period: apply percentage change to previous value
+            sp_normalised.append(sp_normalised[i-1] * (1 + sp_pct_changes[i]))
     
 plt.figure(figsize=(15, 8))
 plt.plot(portfolio_dates, values, marker='o', linewidth=2, markersize=4, label='QEPM Portfolio')
