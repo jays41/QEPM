@@ -8,12 +8,13 @@ investment_values = []
 revival_indices = []
 revival_details = []
 previous_weights = None
+needs_revival = False  # Flag to track if revival is needed at start of next quarter
 
 target_annual_risk = 0.10
 LOOKBACK_YEARS = 2
 
-investment_start_year = 2019
-investment_end_year = 2019
+investment_start_year = 2020
+investment_end_year = 2022
 
 quarters = [
     ('01', '12', '01', '03'),  # Q1: Use Jan-Dec data, invest Q1
@@ -35,6 +36,15 @@ for end_year in investment_dates:
     print(f"\n{end_year} Investments:")
     
     for i, (lookback_start_month, lookback_end_month, invest_start_month, invest_end_month) in enumerate(quarters):
+        # Check if we need to revive the portfolio at the start of this quarter
+        if needs_revival:
+            print(f"Portfolio revived to £100 at start of Q{i+1} {end_year}")
+            investment = 100
+            previous_weights = None
+            needs_revival = False
+            # Record the revival index (next value to be added will be the revived portfolio)
+            revival_indices.append(len(investment_values))
+        
         if lookback_start_month == '01' and lookback_end_month == '12':
             lookback_start_year = str(int(end_year) - LOOKBACK_YEARS)
             lookback_end_year = str(int(end_year) - 1)
@@ -55,26 +65,33 @@ for end_year in investment_dates:
             investment = investment * (1 + res)
             previous_weights = current_weights
             
+            # Record the quarter-end value (even if it's below £1)
+            quarter_end = f"{invest_end_month}-{end_year}"
+            investment_values.append((quarter_end, investment))
+            
             if investment <= 1:  # If investment drops below £1
-                print(f"Portfolio revival at quarter {i+1} of {end_year}")
+                print(f"Portfolio dropped below £1 in Q{i+1} of {end_year} (value: £{investment:.2f})")
                 revival_details.append({
                     'quarter_index': quarter_counter,
                     'date': f"{invest_end_month}-{end_year}",
                     'year': end_year,
                     'quarter': i+1
                 })
-                investment = 100
-                revival_indices.append(len(investment_values) + 1)  # +1 because we'll add the quarter_end after this
-                previous_weights = None  # Reset weights after revival
+                needs_revival = True  # Flag for revival at start of next quarter
         else:
             print(f"Warning: Optimisation failed for Q{i+1} {end_year}")
-            
-        quarter_end = f"{invest_end_month}-{end_year}"
-        investment_values.append((quarter_end, investment))
+            quarter_end = f"{invest_end_month}-{end_year}"
+            investment_values.append((quarter_end, investment))
         quarter_counter += 1
     
     print(f"Portfolio value at end of {end_year}: £{investment:.2f}")
     print(f"Total return since start: {((investment - 100) / 100) * 100:.2f}%")
+
+# Handle any pending revival after the last quarter
+if needs_revival:
+    print("Portfolio would be revived to £100 after the final quarter")
+    # Note: We don't actually add this to investment_values since there are no more quarters
+    # but we account for this in the final calculations
 
 print(f"\nFinal investment values: {investment_values}")
 print(f"Revival points: {revival_indices}")
