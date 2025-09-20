@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import cvxpy as cp
 import statsmodels.api as sm
 from statsmodels.tsa.ar_model import AutoReg
 import warnings
