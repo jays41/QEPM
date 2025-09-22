@@ -100,6 +100,7 @@ def get_preweighting_data(expected_returns_df: pd.DataFrame, start_date, end_dat
         market_data['Date'] = pd.to_datetime(market_data['Date'])
         market_data = market_data[(market_data['Date'] >= start_date) & (market_data['Date'] <= end_date)]
         market_data = market_data.set_index('Date')
+        market_data['Adj Close'] = pd.to_numeric(market_data['Adj Close'], errors='coerce')
         market_returns = market_data['Adj Close'].pct_change().dropna()
         aligned_market = market_returns.reindex(recent_returns.index).fillna(0)
 
