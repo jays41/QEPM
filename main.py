@@ -13,8 +13,8 @@ needs_revival = False  # Flag to track if revival is needed at start of next qua
 target_annual_risk = 0.10
 LOOKBACK_YEARS = 2
 
-investment_start_year = 2020
-investment_end_year = 2022
+investment_start_year = 2022
+investment_end_year = 2023
 
 quarters = [
     ('01', '12', '01', '03'),  # Q1: Use Jan-Dec data, invest Q1
@@ -41,9 +41,11 @@ for end_year in investment_dates:
             print(f"Portfolio revived to £100 at start of Q{i+1} {end_year}")
             investment = 100
             previous_weights = None
+            # Record the revival point in investment_values
+            revival_date = f"{invest_start_month}-{end_year}"
+            investment_values.append((revival_date, investment))
+            revival_indices.append(len(investment_values) - 1)  # Index of the revival we just added
             needs_revival = False
-            # Record the revival index (next value to be added will be the revived portfolio)
-            revival_indices.append(len(investment_values))
         
         if lookback_start_month == '01' and lookback_end_month == '12':
             lookback_start_year = str(int(end_year) - LOOKBACK_YEARS)
@@ -182,5 +184,12 @@ if years > 0:
     if total_capital_injected > 0:
         true_annualised_return = (investment / total_capital_injected) ** (1/years) - 1
         print(f"True Annualised Return (including revivals): {true_annualised_return * 100:.2f}%")
+        
+print(f"DEBUG: Investment values length: {len(investment_values)}")
+print(f"DEBUG: Revival indices: {revival_indices}")
+print(f"DEBUG: Investment values around revivals:")
+for idx in revival_indices:
+    if 0 <= idx < len(investment_values):
+        print(f"  Index {idx}: {investment_values[idx]}")
         
 ## need to plot s&p over this and calculate alpha
