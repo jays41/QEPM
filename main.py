@@ -92,8 +92,6 @@ for end_year in investment_dates:
 # Handle any pending revival after the last quarter
 if needs_revival:
     print("Portfolio would be revived to £100 after the final quarter")
-    # Note: We don't actually add this to investment_values since there are no more quarters
-    # but we account for this in the final calculations
 
 print(f"\nFinal investment values: {investment_values}")
 print(f"Revival points: {revival_indices}")
