@@ -5,7 +5,8 @@ import cvxpy as cp
 def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sectors_array, target_annual_risk):
     n = len(expected_returns)
 
-    target_risk = (1 + target_annual_risk)**(1/252) - 1
+    # Convert annual volatility target to daily volatility (risk constraint uses stdev units)
+    target_risk = target_annual_risk / np.sqrt(252)
 
     # Small tolerance for equality constraints
     epsilon = 1e-6
