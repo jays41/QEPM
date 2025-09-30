@@ -329,7 +329,13 @@ def get_taus_momentum(
     
     stock_returns_subset = stock_returns[['gvkey', 'date', 'returns'] + keep_columns].copy()
     
-    end_date_data = stock_returns_subset[stock_returns_subset['date'] == end_date]
+    # Ensure end_date comparison uses a Period to match the 'date' Period dtype
+    try:
+        end_period = pd.Period(end_date, freq='M')
+    except Exception:
+        # Fallback: attempt to coerce via Timestamp then to_period('M')
+        end_period = pd.to_datetime(end_date).to_period('M')
+    end_date_data = stock_returns_subset[stock_returns_subset['date'] == end_period]
     factor_averages = end_date_data[factor_names].mean().to_frame().T
     
     for gvkey in stock_returns_subset['gvkey'].unique():
@@ -457,9 +463,15 @@ def get_expected_returns_ending(
         how='left'
     )
     
-    economic_factor_data = economic_factor_data[economic_factor_data['date'] <= end_date]
-    fundamental_factor_data = fundamental_factor_data[fundamental_factor_data['date'] <= end_date]
-    technical_factor_data = technical_factor_data[technical_factor_data['date'] <= end_date]
+    # Convert filter end date to monthly Period for consistent comparisons
+    try:
+        end_period = pd.Period(end_date, freq='M')
+    except Exception:
+        end_period = pd.to_datetime(end_date).to_period('M')
+
+    economic_factor_data = economic_factor_data[economic_factor_data['date'] <= end_period]
+    fundamental_factor_data = fundamental_factor_data[fundamental_factor_data['date'] <= end_period]
+    technical_factor_data = technical_factor_data[technical_factor_data['date'] <= end_period]
     
     expected_returns_df, tau_values, av_momentum = get_expected_returns(
         economic_factor_data, 
@@ -473,6 +485,18 @@ def get_expected_returns_ending(
         return pd.DataFrame()
     
     expected_returns_df["Expected Return"] = expected_returns_df["Expected Return"] / 21
+
+    # Winsorize expected returns to reduce the effect of outliers
+    er_series = expected_returns_df["Expected Return"].astype(float)
+    # Soft bounds from percentiles
+    q_low = er_series.quantile(0.01)
+    q_high = er_series.quantile(0.99)
+    # Hard daily cap (2%) as a safety guard
+    hard_cap = 0.005
+    low_cap = max(float(q_low), -hard_cap)
+    high_cap = min(float(q_high), hard_cap)
+    expected_returns_df["Expected Return"] = er_series.clip(lower=low_cap, upper=high_cap)
+    logger.info(f"Winsorized expected returns to [{low_cap:.4%}, {high_cap:.4%}] daily")
     
     # Remove extreme values
     expected_returns_df = expected_returns_df.replace([np.inf, -np.inf], np.nan)
@@ -485,6 +509,9 @@ def get_expected_returns_ending(
     expected_returns_df.rename(columns={'index': 'gvkey'}, inplace=True)
     expected_returns_df = expected_returns_df.reset_index(drop=True)
     
-    logger.info(f"Final expected returns computed for {len(expected_returns_df)} stocks")
+    logger.info(
+        f"Final expected returns computed for {len(expected_returns_df)} stocks; "
+        f"range: {expected_returns_df['Expected Return'].min():.6f} to {expected_returns_df['Expected Return'].max():.6f}"
+    )
     
     return expected_returns_df
