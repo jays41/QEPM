@@ -170,17 +170,47 @@ def backtest(target_annual_risk, lookback_start_month, lookback_start_year, look
     missing_stocks = set(portfolio_df.index) - available_stocks
     
     if missing_stocks:
-        print(f"Warning: {len(missing_stocks)} stocks missing price data, removing from portfolio")
-        portfolio_df = portfolio_df.loc[list(available_stocks)]
-        
-        if not portfolio_df.empty:
-            portfolio_df['weight'] = portfolio_df['weight'] / portfolio_df['weight'].sum()
-        else:
-            print("Error: No stocks with complete price data")
+        print(f"Warning: {len(missing_stocks)} stocks missing price data, re-optimizing on available universe")
+        # Re-optimize on the available stocks to preserve constraints (neutralities, position limits)
+        expected_returns_df_available = expected_returns_df[expected_returns_df['gvkey'].isin(available_stocks)]
+        print(f"Available for re-optimization: {len(expected_returns_df_available)} names")
+
+        min_names = 5
+        if expected_returns_df_available.empty or len(expected_returns_df_available) < min_names:
+            print(f"Warning: Too few stocks with full data after filtering (n={len(expected_returns_df_available)} < {min_names})")
             return 0, False, pd.Series()
+
+        stock_data2, expected_returns2, cov_matrix2, betas2, sectors2 = get_preweighting_data(
+            expected_returns_df_available, lookback_start, lookback_end
+        )
+
+        if len(stock_data2) < min_names:
+            print(f"Warning: Too few stocks ({len(stock_data2)} < {min_names}) for re-optimization")
+            return 0, False, pd.Series()
+
+        portfolio_df, problem_status = get_stratified_weights(
+            stock_data2, expected_returns2, cov_matrix2, betas2, sectors2, target_annual_risk
+        )
+        print(f'Re-optimized weights for {len(portfolio_df)} available stocks')
+
+        # Map new optimized portfolio to gvkeys and set index
+        portfolio_df['gvkey'] = portfolio_df['ticker'].map(ticker_to_gvkey)
+        portfolio_df = portfolio_df.dropna(subset=['gvkey'])
+        portfolio_df['gvkey'] = portfolio_df['gvkey'].astype(int)
+        portfolio_df = portfolio_df.set_index('gvkey')
 
     returns = (end_prices / start_prices - 1).fillna(0)
     portfolio_return = (returns * portfolio_df['weight']).sum()
+    
+    # Sanity checks
+    try:
+        wsum = float(portfolio_df['weight'].sum())
+        gross = float(portfolio_df['weight'].abs().sum())
+        wmin = float(portfolio_df['weight'].min())
+        wmax = float(portfolio_df['weight'].max())
+        print(f"Weights summary — sum: {wsum:.6e}, gross: {gross:.6f}, min: {wmin:.4f}, max: {wmax:.4f}")
+    except Exception:
+        pass
     
     transaction_cost_bps = 10  # 10 basis points per transaction
     current_weights = portfolio_df['weight']
@@ -188,7 +218,7 @@ def backtest(target_annual_risk, lookback_start_month, lookback_start_year, look
     transaction_cost = turnover * (transaction_cost_bps / 10000) # Convert bps to decimal
     
     # net_return = portfolio_return - transaction_cost
-    net_return = portfolio_return # transaction cost of 0 for now
+    net_return = portfolio_return # transaction cost of 0 for now <----------------------
     
     print(f"Portfolio return from {invest_start} to {invest_end}: {(100 * portfolio_return):.6f}%")
     print(f"Transaction cost: {(100 * transaction_cost):.4f}%")
