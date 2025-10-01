@@ -10,10 +10,10 @@ revival_details = []
 previous_weights = None
 needs_revival = False  # Flag to track if revival is needed at start of next quarter
 
-target_annual_risk = 0.10
+target_annual_risk = 0.02
 LOOKBACK_YEARS = 2
 
-investment_start_year = 2022
+investment_start_year = 2012
 investment_end_year = 2023
 
 quarters = [
@@ -47,11 +47,12 @@ for end_year in investment_dates:
             revival_indices.append(len(investment_values) - 1)  # Index of the revival we just added
             needs_revival = False
         
-        if lookback_start_month == '01' and lookback_end_month == '12':
+        # Use LOOKBACK_YEARS for all quarters. If lookback ends in Dec, it ends last year; otherwise current year.
+        if lookback_end_month == '12':
             lookback_start_year = str(int(end_year) - LOOKBACK_YEARS)
             lookback_end_year = str(int(end_year) - 1)
         else:
-            lookback_start_year = str(int(end_year) - 1)
+            lookback_start_year = str(int(end_year) - LOOKBACK_YEARS)
             lookback_end_year = end_year
         
         res, isOptimal, current_weights = backtest(
@@ -102,38 +103,38 @@ sp_values = get_sp500_prices(f"{earliest_possible_start}-01-01", f"{end_year}-12
 # Convert portfolio dates from MM-YYYY format to datetime objects
 portfolio_dates = pd.to_datetime(dates, format='%m-%Y')
 
-# Get S&P 500 values at quarter-end dates that match portfolio dates
+# Get S&P 500 values at month-end dates matching portfolio dates
 sp_aligned = []
 for port_date in portfolio_dates:
-    # Find the S&P 500 price closest to the portfolio date (within the same month)
+    # Use the last trading day of the month containing the portfolio date
     month_mask = (sp_values["Date"].dt.year == port_date.year) & (sp_values["Date"].dt.month == port_date.month)
     month_data = sp_values[month_mask]
     if not month_data.empty:
-        # Get the first trading day of that month
-        closest_sp_date = month_data["Date"].min()
-        closest_sp_price = month_data[month_data["Date"] == closest_sp_date]["Close"].iloc[0]
-        sp_aligned.append((closest_sp_date, closest_sp_price))
+        last_sp_date = month_data["Date"].max()
+        last_sp_price = float(month_data.loc[month_data["Date"] == last_sp_date, "Close"].iloc[0])
+        sp_aligned.append((last_sp_date, last_sp_price))
 
 # Convert S&P 500 to track same capital injection pattern as portfolio
 if sp_aligned:
     sp_dates, sp_prices = zip(*sp_aligned)
-    # Convert string prices to float
+    # Convert prices to float
     sp_prices_float = [float(price) for price in sp_prices]
     
     # Calculate S&P 500 percentage changes
-    sp_pct_changes = [0]  # First period has no change
+    sp_pct_changes = [0.0]  # First period has no change
     for i in range(1, len(sp_prices_float)):
         pct_change = (sp_prices_float[i] - sp_prices_float[i-1]) / sp_prices_float[i-1]
         sp_pct_changes.append(pct_change)
     
     # Initialize S&P normalized values starting at 100
-    sp_normalised = [100]  # Start with £100 invested
+    sp_normalised = [100.0]  # Start with £100 invested
     revival_indices_set = set(revival_indices)
     
     for i in range(1, len(sp_prices_float)):
         if i in revival_indices_set:
-            # Revival: add £100 to current S&P value and apply this quarter's return
-            sp_normalised.append(sp_normalised[i-1] + 100 + (100 * sp_pct_changes[i]))
+            # Revival: inject £100 first, then apply this period's return
+            base = sp_normalised[i-1] + 100.0
+            sp_normalised.append(base * (1 + sp_pct_changes[i]))
         else:
             # Normal period: apply percentage change to previous value
             sp_normalised.append(sp_normalised[i-1] * (1 + sp_pct_changes[i]))
@@ -142,7 +143,8 @@ plt.figure(figsize=(15, 8))
 plt.plot(portfolio_dates, values, marker='o', linewidth=2, markersize=4, label='QEPM Portfolio')
 if sp_aligned:
     plt.plot(sp_dates, sp_normalised, marker='s', linewidth=2, markersize=3, label='S&P 500')
-plt.title(f'Portfolio Value Over Time (QEPM Strategy) | Alpha ={target_annual_risk * 100}%', fontsize=14)
+# Show correct label/value for target annual risk
+plt.title(f'Portfolio Value Over Time (QEPM Strategy) | Target Annual Risk = {target_annual_risk:.1%}', fontsize=14)
 plt.xlabel('Quarter-End', fontsize=12)
 plt.ylabel('Portfolio Value (£)', fontsize=12)
 plt.xticks(rotation=45)
@@ -174,7 +176,9 @@ print(f"Total Return (ignoring revivals): {((investment - 100) / 100) * 100:.2f}
 print(f"True Total Return (including revivals): {((investment - total_capital_injected) / total_capital_injected) * 100:.2f}%")
 print(f"Number of Revivals: {len(revival_indices)}")
 
-years = len(investment_values) / 4
+# Annualisation: count only true quarter-end observations to avoid initial/revival entries
+quarter_end_months = {3, 6, 9, 12}
+years = sum(dt.month in quarter_end_months for dt in portfolio_dates) / 4
 if years > 0:
     annualised_return_ignoring_revivals = (investment / 100) ** (1/years) - 1
     print(f"Annualised Return (ignoring revivals): {annualised_return_ignoring_revivals * 100:.2f}%")
