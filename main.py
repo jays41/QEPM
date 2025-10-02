@@ -10,10 +10,14 @@ revival_details = []
 previous_weights = None
 needs_revival = False  # Flag to track if revival is needed at start of next quarter
 
-target_annual_risk = 0.02
-LOOKBACK_YEARS = 2
+target_annual_risk = 0.05
+LOOKBACK_YEARS = 1
 
-investment_start_year = 2012
+# Time-scale knobs (switch to quarterly by setting PERIODS_PER_YEAR=4, RETURNS_FREQ='Q')
+PERIODS_PER_YEAR = 12  # 12 for monthly, 4 for quarterly
+RETURNS_FREQ = 'M'     # 'M' (monthly) or 'Q' (quarterly)
+
+investment_start_year = 2022
 investment_end_year = 2023
 
 quarters = [
@@ -61,7 +65,9 @@ for end_year in investment_dates:
             lookback_end_month, lookback_end_year, 
             invest_start_month, end_year, 
             invest_end_month, end_year,
-            previous_weights
+            previous_weights,
+            periods_per_year=PERIODS_PER_YEAR,
+            returns_freq=RETURNS_FREQ
         )
         
         if isOptimal:

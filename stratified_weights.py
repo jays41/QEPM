@@ -2,11 +2,11 @@ import pandas as pd
 import numpy as np
 import cvxpy as cp
 
-def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sectors_array, target_annual_risk):
+def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sectors_array, target_annual_risk, periods_per_year=12):
     n = len(expected_returns)
 
-    # Convert annual volatility target to daily volatility (risk constraint uses stdev units)
-    target_risk = target_annual_risk / np.sqrt(252)
+    # Convert annual volatility target to per-period volatility (risk constraint uses stdev units)
+    target_risk = target_annual_risk / np.sqrt(periods_per_year)
 
     # Small tolerance for equality constraints
     epsilon = 1e-6
@@ -105,18 +105,18 @@ def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sect
         # Calculate actual risk using original covariance matrix
         portfolio_variance = optimized_weights @ cov_matrix @ optimized_weights
         portfolio_volatility = np.sqrt(portfolio_variance)
-        
-        # Calculating annual expected returns
-        expected_daily_returns = np.sum(expected_returns * optimized_weights)
-        
-        print("expected_daily_returns:", expected_daily_returns)
+
+        # Calculating per-period expected return
+        expected_period_return = np.sum(expected_returns * optimized_weights)
+
+        print("expected_period_return:", expected_period_return)
         print("expected_returns (min, max):", np.min(expected_returns), np.max(expected_returns))
         print("optimized_weights (min, max):", np.min(optimized_weights), np.max(optimized_weights))
-        if expected_daily_returns < -1 or expected_daily_returns > 1:
+        if expected_period_return < -1 or expected_period_return > 1:
             print("Warning: expected_daily_returns is outside typical range!")
-        
-        annual_return = (1 + expected_daily_returns) ** 252 - 1
-        annual_volatility = portfolio_volatility * np.sqrt(252)
+
+        annual_return = (1 + expected_period_return) ** periods_per_year - 1
+        annual_volatility = portfolio_volatility * np.sqrt(periods_per_year)
         annual_sharpe = annual_return / annual_volatility
         
         # Verification

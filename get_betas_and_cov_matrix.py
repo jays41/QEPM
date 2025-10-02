@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-def get_preweighting_data(expected_returns_df: pd.DataFrame, start_date, end_date):
+def get_preweighting_data(expected_returns_df: pd.DataFrame, start_date, end_date, returns_freq: str = 'M'):
 
     # Ensure 'gvkey' column exists
     if 'gvkey' not in expected_returns_df.columns:
@@ -33,8 +33,18 @@ def get_preweighting_data(expected_returns_df: pd.DataFrame, start_date, end_dat
     # keep only those in contention
     stock_data = stock_data[stock_data['gvkey'].isin(gvkeys_on_min_date)]
 
-    # Calculate daily returns
-    stock_data['return'] = stock_data.groupby('ticker')['close'].pct_change()
+    # Calculate returns at requested frequency
+    if returns_freq == 'Q':
+        stock_data['Period'] = stock_data['date'].dt.to_period('Q')
+    else:
+        stock_data['Period'] = stock_data['date'].dt.to_period('M')
+    agg = (stock_data
+           .groupby(['ticker', 'Period'])
+           .agg({'close': 'last', 'gvkey': 'last', 'sector': 'last'})
+           .reset_index())
+    agg['date'] = agg['Period'].dt.to_timestamp(how='end')
+    agg['return'] = agg.groupby('ticker')['close'].pct_change()
+    stock_data = agg
 
     # Drop rows with NaN returns and filter out extreme outliers
     stock_data = stock_data.dropna(subset=['return'])
@@ -64,7 +74,8 @@ def get_preweighting_data(expected_returns_df: pd.DataFrame, start_date, end_dat
     gvkey_mapping = gvkey_mapping[gvkey_mapping.index.isin(tickers_to_keep)]
 
     # Calculate covariance matrix using recent data
-    recent_period = min(252, len(returns_pivot))
+    horizon = 36 if returns_freq == 'M' else 12  # 3 years of months or ~3 years of quarters
+    recent_period = min(horizon, len(returns_pivot))
     recent_returns = returns_pivot.iloc[-recent_period:]
 
     # Remove stocks with too many missing values
@@ -97,11 +108,24 @@ def get_preweighting_data(expected_returns_df: pd.DataFrame, start_date, end_dat
         start_date = returns_pivot.index.min().strftime('%Y-%m-%d')
         end_date = returns_pivot.index.max().strftime('%Y-%m-%d')
         market_data = pd.read_csv(r"QEPM\data\s&p_data.csv")
-        market_data['Date'] = pd.to_datetime(market_data['Date'])
-        market_data = market_data[(market_data['Date'] >= start_date) & (market_data['Date'] <= end_date)]
-        market_data = market_data.set_index('Date')
-        market_data['Adj Close'] = pd.to_numeric(market_data['Adj Close'], errors='coerce')
-        market_returns = market_data['Adj Close'].pct_change().dropna()
+        # Normalize column names for robustness
+        market_data.columns = [c.strip() for c in market_data.columns]
+        date_col = 'Date' if 'Date' in market_data.columns else ('date' if 'date' in market_data.columns else None)
+        adj_col = 'Adj Close' if 'Adj Close' in market_data.columns else ('AdjClose' if 'AdjClose' in market_data.columns else None)
+        if date_col is None or adj_col is None:
+            raise KeyError("s&p_data.csv must contain 'Date' (or 'date') and 'Adj Close' (or 'AdjClose') columns")
+        market_data[date_col] = pd.to_datetime(market_data[date_col])
+        market_data = market_data[(market_data[date_col] >= pd.to_datetime(start_date)) & (market_data[date_col] <= pd.to_datetime(end_date))]
+        market_data = market_data.set_index(date_col)
+        market_data[adj_col] = pd.to_numeric(market_data[adj_col], errors='coerce')
+        if returns_freq == 'Q':
+            market_data['Quarter'] = market_data.index.to_period('Q')
+            market_series = market_data.groupby('Quarter')[adj_col].last().to_timestamp(how='end')
+            market_returns = market_series.pct_change().dropna()
+        else:
+            market_data['Month'] = market_data.index.to_period('M')
+            market_series = market_data.groupby('Month')[adj_col].last().to_timestamp(how='end')
+            market_returns = market_series.pct_change().dropna()
         aligned_market = market_returns.reindex(recent_returns.index).fillna(0)
 
         betas = {}

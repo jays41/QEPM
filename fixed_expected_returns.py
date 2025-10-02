@@ -109,14 +109,24 @@ def get_expected_returns(
                 forecasted_values_fundamental = forecasted_fundamental_factors.loc[
                     common_factors_fundamental, "ForecastValue"
                 ].values.reshape(-1, 1)
+                # Robustness: replace NaN/Inf with 0 before matmul
+                forecasted_values_fundamental = np.nan_to_num(
+                    forecasted_values_fundamental, nan=0.0, posinf=0.0, neginf=0.0
+                )
                 
                 beta_matrix_fundamental = fundamental_betas[common_factors_fundamental].values
+                beta_matrix_fundamental = np.nan_to_num(
+                    beta_matrix_fundamental, nan=0.0, posinf=0.0, neginf=0.0
+                )
                 
                 if beta_matrix_fundamental.shape[1] != forecasted_values_fundamental.shape[0]:
                     logger.error("Matrix dimension mismatch in fundamental factors")
                     returns_fundamental = pd.DataFrame()
                 else:
                     returns_fundamental_values = beta_matrix_fundamental @ forecasted_values_fundamental
+                    returns_fundamental_values = np.nan_to_num(
+                        returns_fundamental_values, nan=0.0, posinf=0.0, neginf=0.0
+                    )
                     returns_fundamental = pd.DataFrame(
                         returns_fundamental_values, 
                         index=fundamental_betas.index, 
@@ -386,7 +396,8 @@ def get_taus_momentum(
 
 def get_expected_returns_ending(
     end_date: str, 
-    data_path: str = "QEPM/data/"
+    data_path: str = "QEPM/data/",
+    returns_freq: str = 'M'
 ) -> pd.DataFrame:
     try:
         stock_returns = pd.read_csv(f"{data_path}all_data.csv")
@@ -484,19 +495,28 @@ def get_expected_returns_ending(
         logger.error("Expected returns calculation failed")
         return pd.DataFrame()
     
-    expected_returns_df["Expected Return"] = expected_returns_df["Expected Return"] / 21
+    # expected_returns_df["Expected Return"] is monthly by construction
+    # If quarterly requested, compound 3 months into one quarter
+    if returns_freq == 'Q':
+        er_m = expected_returns_df["Expected Return"].astype(float)
+        expected_returns_df["Expected Return"] = (1.0 + er_m) ** 3 - 1.0
+        cap = 0.35  # quarterly hard cap
+        cap_label = 'quarterly'
+    else:
+        cap = 0.15  # monthly hard cap
+        cap_label = 'monthly'
 
     # Winsorize expected returns to reduce the effect of outliers
     er_series = expected_returns_df["Expected Return"].astype(float)
     # Soft bounds from percentiles
     q_low = er_series.quantile(0.01)
     q_high = er_series.quantile(0.99)
-    # Hard daily cap (2%) as a safety guard
-    hard_cap = 0.005
+    # Time-scale specific hard cap
+    hard_cap = cap
     low_cap = max(float(q_low), -hard_cap)
     high_cap = min(float(q_high), hard_cap)
     expected_returns_df["Expected Return"] = er_series.clip(lower=low_cap, upper=high_cap)
-    logger.info(f"Winsorized expected returns to [{low_cap:.4%}, {high_cap:.4%}] daily")
+    logger.info(f"Winsorized expected returns to [{low_cap:.4%}, {high_cap:.4%}] {cap_label}")
     
     # Remove extreme values
     expected_returns_df = expected_returns_df.replace([np.inf, -np.inf], np.nan)

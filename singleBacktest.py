@@ -94,7 +94,7 @@ def calculate_turnover(prev_weights, curr_weights):
     
     return (prev_aligned - curr_aligned).abs().sum()
 
-def backtest(target_annual_risk, lookback_start_month, lookback_start_year, lookback_end_month, lookback_end_year, invest_start_month, invest_start_year, invest_end_month, invest_end_year, previous_weights=None):
+def backtest(target_annual_risk, lookback_start_month, lookback_start_year, lookback_end_month, lookback_end_year, invest_start_month, invest_start_year, invest_end_month, invest_end_year, previous_weights=None, periods_per_year=12, returns_freq='M'):
     lookback_start = pd.Timestamp(f"{lookback_start_year}-{lookback_start_month}-01")
     lookback_end = pd.Timestamp(f"{lookback_end_year}-{lookback_end_month}-01") + pd.offsets.MonthEnd(0)
     end_date_for_expected_returns = f'{lookback_end_year}-{lookback_end_month}'
@@ -119,7 +119,7 @@ def backtest(target_annual_risk, lookback_start_month, lookback_start_year, look
     screened_stocks = screened_stocks_df['stock'].tolist()
     print(f"Selected {len(screened_stocks)} stocks from screening")
     
-    expected_returns_df = get_expected_returns_ending(end_date_for_expected_returns, "QEPM/data/")
+    expected_returns_df = get_expected_returns_ending(end_date_for_expected_returns, "QEPM/data/", returns_freq=returns_freq)
     expected_returns_df = expected_returns_df.reset_index()
     
     # Filter expected returns to only include screened stocks
@@ -135,7 +135,7 @@ def backtest(target_annual_risk, lookback_start_month, lookback_start_year, look
         return 0, False, pd.Series()
 
     stock_data, expected_returns, cov_matrix, betas, sectors = get_preweighting_data(
-        expected_returns_df, lookback_start, lookback_end
+        expected_returns_df, lookback_start, lookback_end, returns_freq=returns_freq
     )
     
     # check if there is enough stocks for optimisation
@@ -143,7 +143,7 @@ def backtest(target_annual_risk, lookback_start_month, lookback_start_year, look
         print(f"Warning: Too few stocks ({len(stock_data)}) for optimization")
         return 0, False, pd.Series()
 
-    portfolio_df, problem_status = get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sectors, target_annual_risk)
+    portfolio_df, problem_status = get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sectors, target_annual_risk, periods_per_year=periods_per_year)
     print(f'Optimized weights for {len(portfolio_df)} screened stocks')
 
     price_data['date'] = pd.to_datetime(price_data['date'])
@@ -189,7 +189,7 @@ def backtest(target_annual_risk, lookback_start_month, lookback_start_year, look
             return 0, False, pd.Series()
 
         portfolio_df, problem_status = get_stratified_weights(
-            stock_data2, expected_returns2, cov_matrix2, betas2, sectors2, target_annual_risk
+            stock_data2, expected_returns2, cov_matrix2, betas2, sectors2, target_annual_risk, periods_per_year=periods_per_year
         )
         print(f'Re-optimized weights for {len(portfolio_df)} available stocks')
 
