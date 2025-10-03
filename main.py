@@ -14,11 +14,11 @@ target_annual_risk = 0.05
 LOOKBACK_YEARS = 1
 
 # Time-scale knobs (switch to quarterly by setting PERIODS_PER_YEAR=4, RETURNS_FREQ='Q')
-PERIODS_PER_YEAR = 12  # 12 for monthly, 4 for quarterly
-RETURNS_FREQ = 'M'     # 'M' (monthly) or 'Q' (quarterly)
+PERIODS_PER_YEAR = 4  # 12 for monthly, 4 for quarterly
+RETURNS_FREQ = 'Q'     # 'M' (monthly) or 'Q' (quarterly)
 
-investment_start_year = 2022
-investment_end_year = 2023
+investment_start_year = 2017
+investment_end_year = 2017
 
 quarters = [
     ('01', '12', '01', '03'),  # Q1: Use Jan-Dec data, invest Q1
@@ -158,6 +158,16 @@ plt.grid(True, alpha=0.3)
 
 plt.axhline(y=100, color='gray', linestyle=':', alpha=0.7, label='Initial Investment')
 
+# Build and display a concise run configuration summary on the chart
+config_text = (
+    f"Config: risk={target_annual_risk:.1%}, "
+    f"lookback={LOOKBACK_YEARS}y, "
+    f"freq={RETURNS_FREQ}/{PERIODS_PER_YEAR}py, "
+    f"years={investment_start_year}-{investment_end_year}"
+)
+# Also print to console for logging/comparison across runs
+print(f"Run {config_text}")
+
 for idx in revival_indices:
     if idx < len(portfolio_dates):
         plt.axvline(x=portfolio_dates[idx], color='red', linestyle='--', alpha=0.7, 
@@ -167,6 +177,9 @@ final_return = ((investment - 100) / 100) * 100
 plt.text(0.02, 0.98, f'Final Return: {final_return:.2f}%\nRevivals: {len(revival_indices)}', 
          transform=plt.gca().transAxes, verticalalignment='top', 
          bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+plt.text(0.98, 0.98, config_text,
+         transform=plt.gca().transAxes, horizontalalignment='right', verticalalignment='top',
+         bbox=dict(boxstyle='round', facecolor='lavender', alpha=0.8))
 
 plt.legend()
 plt.tight_layout()
