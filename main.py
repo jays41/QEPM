@@ -2,6 +2,8 @@ from singleBacktest import backtest
 import pandas as pd
 import matplotlib.pyplot as plt
 from sp500_prices import get_sp500_prices
+from typing import Literal
+import math
 
 investment = 100
 investment_values = []
@@ -11,11 +13,12 @@ previous_weights = None
 needs_revival = False  # Flag to track if revival is needed at start of next quarter
 
 target_annual_risk = 0.05
-LOOKBACK_YEARS = 1
+LOOKBACK_MONTHS = 12
 
 # Time-scale knobs (switch to quarterly by setting PERIODS_PER_YEAR=4, RETURNS_FREQ='Q')
-PERIODS_PER_YEAR = 4  # 12 for monthly, 4 for quarterly
-RETURNS_FREQ = 'Q'     # 'M' (monthly) or 'Q' (quarterly)
+ReturnsFreq = Literal['M', 'Q']
+RETURNS_FREQ: ReturnsFreq = 'Q'     # 'M' (monthly) or 'Q' (quarterly)
+PERIODS_PER_YEAR = {'M': 12, 'Q': 4}[RETURNS_FREQ]
 
 investment_start_year = 2017
 investment_end_year = 2017
@@ -29,7 +32,10 @@ quarters = [
 
 quarter_counter = 0
 
-earliest_possible_start = max(investment_start_year, 2010 + LOOKBACK_YEARS) # data starts from 2010 (as of 12/09/2025)
+earliest_possible_start = max(
+    investment_start_year,
+    2010 + math.ceil(LOOKBACK_MONTHS / 12)
+) # data starts from 2010 (as of 12/09/2025)
 investment_dates = [str(year) for year in range(earliest_possible_start, investment_end_year + 1)]
 
 # Add initial investment point at the start date
@@ -51,13 +57,15 @@ for end_year in investment_dates:
             revival_indices.append(len(investment_values) - 1)  # Index of the revival we just added
             needs_revival = False
         
-        # Use LOOKBACK_YEARS for all quarters. If lookback ends in Dec, it ends last year; otherwise current year.
-        if lookback_end_month == '12':
-            lookback_start_year = str(int(end_year) - LOOKBACK_YEARS)
-            lookback_end_year = str(int(end_year) - 1)
-        else:
-            lookback_start_year = str(int(end_year) - LOOKBACK_YEARS)
-            lookback_end_year = end_year
+        # Compute lookback window in months ending the month before invest start
+        invest_start_period = pd.Period(f"{end_year}-{invest_start_month}", freq='M')
+        lookback_end_period = invest_start_period - 1
+        lookback_start_period = lookback_end_period - (LOOKBACK_MONTHS - 1)
+
+        lookback_start_month = f"{lookback_start_period.month:02d}"
+        lookback_start_year = str(lookback_start_period.year)
+        lookback_end_month = f"{lookback_end_period.month:02d}"
+        lookback_end_year = str(lookback_end_period.year)
         
         res, isOptimal, current_weights = backtest(
             target_annual_risk,
@@ -158,14 +166,13 @@ plt.grid(True, alpha=0.3)
 
 plt.axhline(y=100, color='gray', linestyle=':', alpha=0.7, label='Initial Investment')
 
-# Build and display a concise run configuration summary on the chart
 config_text = (
     f"Config: risk={target_annual_risk:.1%}, "
-    f"lookback={LOOKBACK_YEARS}y, "
+    f"lookback={LOOKBACK_MONTHS}m, "
     f"freq={RETURNS_FREQ}/{PERIODS_PER_YEAR}py, "
     f"years={investment_start_year}-{investment_end_year}"
 )
-# Also print to console for logging/comparison across runs
+
 print(f"Run {config_text}")
 
 for idx in revival_indices:
