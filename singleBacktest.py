@@ -135,7 +135,12 @@ def backtest(target_annual_risk, lookback_start_month, lookback_start_year, look
         return 0, False, pd.Series()
 
     stock_data, expected_returns, cov_matrix, betas, sectors = get_preweighting_data(
-        expected_returns_df, lookback_start, lookback_end, returns_freq=returns_freq
+        expected_returns_df,
+        lookback_start,
+        lookback_end,
+        returns_freq=returns_freq,
+        invest_start=invest_start,
+        invest_end=invest_end,
     )
     
     # check if there is enough stocks for optimisation
@@ -181,7 +186,12 @@ def backtest(target_annual_risk, lookback_start_month, lookback_start_year, look
             return 0, False, pd.Series()
 
         stock_data2, expected_returns2, cov_matrix2, betas2, sectors2 = get_preweighting_data(
-            expected_returns_df_available, lookback_start, lookback_end
+            expected_returns_df_available,
+            lookback_start,
+            lookback_end,
+            returns_freq=returns_freq,
+            invest_start=invest_start,
+            invest_end=invest_end,
         )
 
         if len(stock_data2) < min_names:

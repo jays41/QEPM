@@ -229,8 +229,8 @@ def get_z_scores_dataframe(start_date, end_date, z_score_threshold=None, top_per
                 'total_factors_used': fund_factors_used + econ_factors_used
             })
             
-        if count % 100 == 0:
-            print(f"Processed {count}/{total_stocks} stocks...")
+        # if count % 100 == 0:
+        #     print(f"Processed {count}/{total_stocks} stocks...")
     
     result_df = pd.DataFrame(z_scores)
     
