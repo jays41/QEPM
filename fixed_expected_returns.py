@@ -16,162 +16,221 @@ warnings.filterwarnings("ignore", message=".*No supported index is available.*")
 warnings.filterwarnings("ignore", message=".*Only PeriodIndexes, DatetimeIndexes.*")
 
 def get_expected_returns(
-    economic_factor_data: pd.DataFrame, 
-    fundamental_factor_data: pd.DataFrame, 
-    technical_factor_data: pd.DataFrame, 
-    end_date: str
+    economic_factor_data: pd.DataFrame,
+    fundamental_factor_data: pd.DataFrame,
+    technical_factor_data: pd.DataFrame,
+    end_date: str,
+    tau_mode: str = 'off',  # 'off' | 'avg' | 'stock'
+    tau_scale: float = 0.05,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    tau_values, skipped_tau_stocks, av_momentum = get_taus_momentum(
+    """Compute per-period expected returns from economic and fundamental factors.
+
+    - Uses union of gvkeys across groups; missing groups contribute 0.
+    - Returns tau/momentum DataFrame aligned to the same gvkey index for downstream use.
+    """
+
+    # Technical/momentum sidecar (taus), alignable by gvkey
+    tau_values_raw, skipped_tau_stocks, av_momentum = get_taus_momentum(
         technical_factor_data, end_date
     )
-    
-    if tau_values.empty:
-        logger.warning("No tau values computed - technical factor analysis failed")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-    
-    tau_values = tau_values.set_index('gvkey')
-
-    try:
-        economic_betas, skipped_economic_stocks = get_betas(
-            economic_factor_data, 'PeriodDate'
+    if isinstance(tau_values_raw, pd.DataFrame) and not tau_values_raw.empty:
+        tau_values = tau_values_raw.set_index("gvkey").drop(
+            columns=["dropped_rows"], errors="ignore"
         )
+    else:
+        tau_values = pd.DataFrame()
+
+    # Economic expected return contribution
+    returns_economic = pd.DataFrame()
+    try:
+        economic_betas, _ = get_betas(economic_factor_data, "PeriodDate")
         forecasted_economic_factors = forecast_factor(
-            economic_factor_data, 'PeriodDate'
+            economic_factor_data, "PeriodDate"
         ).set_index("ID")
-        
-        if economic_betas.empty or forecasted_economic_factors.empty:
-            logger.warning("Economic factor processing failed")
-            returns_economic = pd.DataFrame()
-        else:
-            economic_betas = economic_betas.set_index('gvkey').drop(
-                columns=['dropped_rows'], errors='ignore'
+
+        if not economic_betas.empty and not forecasted_economic_factors.empty:
+            economic_betas = economic_betas.set_index("gvkey").drop(
+                columns=["dropped_rows"], errors="ignore"
             )
-            
             economic_betas.columns = economic_betas.columns.astype(str)
-            forecasted_economic_factors.index = forecasted_economic_factors.index.astype(str)
-            
+            forecasted_economic_factors.index = (
+                forecasted_economic_factors.index.astype(str)
+            )
             common_factors_economic = economic_betas.columns.intersection(
                 forecasted_economic_factors.index
             )
-            
-            if len(common_factors_economic) == 0:
-                logger.warning("No common economic factors found")
-                returns_economic = pd.DataFrame()
-            else:
+            if len(common_factors_economic) > 0:
                 forecasted_values_economic = forecasted_economic_factors.loc[
                     common_factors_economic, "ForecastValue"
                 ].values.reshape(-1, 1)
-                
-                beta_matrix_economic = economic_betas[common_factors_economic].values
-                
-                if beta_matrix_economic.shape[1] != forecasted_values_economic.shape[0]:
-                    logger.error("Matrix dimension mismatch in economic factors")
-                    returns_economic = pd.DataFrame()
-                else:
-                    returns_economic_values = beta_matrix_economic @ forecasted_values_economic
-                    returns_economic = pd.DataFrame(
-                        returns_economic_values, 
-                        index=economic_betas.index, 
-                        columns=["Economic_Return"]
+                forecasted_values_economic = np.nan_to_num(
+                    forecasted_values_economic, nan=0.0, posinf=0.0, neginf=0.0
+                )
+                beta_matrix_economic = np.nan_to_num(
+                    economic_betas[common_factors_economic].values,
+                    nan=0.0,
+                    posinf=0.0,
+                    neginf=0.0,
+                )
+                if (
+                    beta_matrix_economic.shape[1]
+                    == forecasted_values_economic.shape[0]
+                ):
+                    returns_economic_values = (
+                        beta_matrix_economic @ forecasted_values_economic
                     )
-                    
+                    returns_economic = pd.DataFrame(
+                        returns_economic_values,
+                        index=economic_betas.index,
+                        columns=["Economic_Return"],
+                    )
     except Exception as e:
         logger.error(f"Error processing economic factors: {e}")
         returns_economic = pd.DataFrame()
 
+    # Fundamental expected return contribution
+    returns_fundamental = pd.DataFrame()
     try:
-        fundamental_betas, skipped_fundamental_stocks = get_betas(
-            fundamental_factor_data, 'date'
-        )
+        fundamental_betas, _ = get_betas(fundamental_factor_data, "date")
         forecasted_fundamental_factors = forecast_factor(
-            fundamental_factor_data, 'date'
+            fundamental_factor_data, "date"
         ).set_index("ID")
-        
-        if fundamental_betas.empty or forecasted_fundamental_factors.empty:
-            logger.warning("Fundamental factor processing failed")
-            returns_fundamental = pd.DataFrame()
-        else:
-            fundamental_betas = fundamental_betas.set_index('gvkey').drop(
-                columns=['dropped_rows'], errors='ignore'
+
+        if not fundamental_betas.empty and not forecasted_fundamental_factors.empty:
+            fundamental_betas = fundamental_betas.set_index("gvkey").drop(
+                columns=["dropped_rows"], errors="ignore"
             )
-            
             fundamental_betas.columns = fundamental_betas.columns.astype(str)
-            forecasted_fundamental_factors.index = forecasted_fundamental_factors.index.astype(str)
-            
+            forecasted_fundamental_factors.index = (
+                forecasted_fundamental_factors.index.astype(str)
+            )
             common_factors_fundamental = fundamental_betas.columns.intersection(
                 forecasted_fundamental_factors.index
             )
-            
-            if len(common_factors_fundamental) == 0:
-                logger.warning("No common fundamental factors found")
-                returns_fundamental = pd.DataFrame()
-            else:
+            if len(common_factors_fundamental) > 0:
                 forecasted_values_fundamental = forecasted_fundamental_factors.loc[
                     common_factors_fundamental, "ForecastValue"
                 ].values.reshape(-1, 1)
-                # Robustness: replace NaN/Inf with 0 before matmul
                 forecasted_values_fundamental = np.nan_to_num(
                     forecasted_values_fundamental, nan=0.0, posinf=0.0, neginf=0.0
                 )
-                
-                beta_matrix_fundamental = fundamental_betas[common_factors_fundamental].values
                 beta_matrix_fundamental = np.nan_to_num(
-                    beta_matrix_fundamental, nan=0.0, posinf=0.0, neginf=0.0
+                    fundamental_betas[common_factors_fundamental].values,
+                    nan=0.0,
+                    posinf=0.0,
+                    neginf=0.0,
                 )
-                
-                if beta_matrix_fundamental.shape[1] != forecasted_values_fundamental.shape[0]:
-                    logger.error("Matrix dimension mismatch in fundamental factors")
-                    returns_fundamental = pd.DataFrame()
-                else:
-                    returns_fundamental_values = beta_matrix_fundamental @ forecasted_values_fundamental
-                    returns_fundamental_values = np.nan_to_num(
-                        returns_fundamental_values, nan=0.0, posinf=0.0, neginf=0.0
+                if (
+                    beta_matrix_fundamental.shape[1]
+                    == forecasted_values_fundamental.shape[0]
+                ):
+                    returns_fundamental_values = (
+                        beta_matrix_fundamental @ forecasted_values_fundamental
                     )
                     returns_fundamental = pd.DataFrame(
-                        returns_fundamental_values, 
-                        index=fundamental_betas.index, 
-                        columns=["Fundamental_Return"]
+                        returns_fundamental_values,
+                        index=fundamental_betas.index,
+                        columns=["Fundamental_Return"],
                     )
-                    
     except Exception as e:
         logger.error(f"Error processing fundamental factors: {e}")
         returns_fundamental = pd.DataFrame()
 
-    common_gvkeys = set(tau_values.index)
-    
+    # Union-based tolerance: include any gvkey that appears in at least one group
+    union_gvkeys = set()
+    if isinstance(tau_values, pd.DataFrame) and not tau_values.empty:
+        union_gvkeys |= set(tau_values.index)
     if not returns_economic.empty:
-        common_gvkeys &= set(returns_economic.index)
+        union_gvkeys |= set(returns_economic.index)
     if not returns_fundamental.empty:
-        common_gvkeys &= set(returns_fundamental.index)
-    
-    common_gvkeys = list(common_gvkeys)
-    
-    if not common_gvkeys:
-        logger.error("No common stocks found across all factor types")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-    
+        union_gvkeys |= set(returns_fundamental.index)
+    union_gvkeys = list(union_gvkeys)
+
+    if not union_gvkeys:
+        logger.error("No stocks found across factor types")
+        return pd.DataFrame(), pd.DataFrame(), av_momentum
+
     expected_returns_df = pd.DataFrame(
-        index=common_gvkeys, 
-        columns=["Expected_Return"],
-        dtype=float
+        index=union_gvkeys, columns=["Expected_Return"], dtype=float
     )
     expected_returns_df["Expected_Return"] = 0.0
-    
+
     if not returns_economic.empty:
-        economic_aligned = returns_economic.loc[common_gvkeys, "Economic_Return"]
-        expected_returns_df["Expected_Return"] += economic_aligned
-    
+        expected_returns_df.loc[returns_economic.index, "Expected_Return"] += (
+            returns_economic["Economic_Return"].astype(float)
+        )
     if not returns_fundamental.empty:
-        fundamental_aligned = returns_fundamental.loc[common_gvkeys, "Fundamental_Return"]
-        expected_returns_df["Expected_Return"] += fundamental_aligned
-    
-    tau_values_aligned = tau_values.loc[common_gvkeys]
-    
+        expected_returns_df.loc[
+            returns_fundamental.index, "Expected_Return"
+        ] += returns_fundamental["Fundamental_Return"].astype(float)
+
+    # Align tau_values to the same index for downstream use, fill missing with zeros
+    if isinstance(tau_values, pd.DataFrame) and not tau_values.empty:
+        tau_values_aligned = tau_values.reindex(expected_returns_df.index).fillna(0.0)
+    else:
+        tau_values_aligned = pd.DataFrame(index=expected_returns_df.index)
+
+    # Optional: apply tau tilt as an objective adjustment to expected returns
+    try:
+        if (
+            tau_mode != 'off'
+            and isinstance(tau_values_aligned, pd.DataFrame)
+            and not tau_values_aligned.empty
+        ):
+            factor_names = [c for c in tau_values_aligned.columns if c != 'dropped_rows']
+            if factor_names:
+                tau_matrix = tau_values_aligned[factor_names].fillna(0.0)
+
+                tilt_series = None
+                if tau_mode == 'avg':
+                    # Use cross-sectional average factor levels at end_date
+                    if isinstance(av_momentum, pd.DataFrame) and not av_momentum.empty:
+                        # Align columns just in case
+                        f_av = av_momentum.iloc[0]
+                        f_av = f_av.reindex(factor_names).fillna(0.0)
+                        # per-stock tilt = tau_i dot avg_factor
+                        tilt_series = pd.Series(
+                            tau_matrix.values @ f_av.values,
+                            index=tau_matrix.index,
+                        )
+                    else:
+                        logger.warning("tau_mode='avg' but av_momentum is empty; skipping tau tilt")
+
+                elif tau_mode == 'stock':
+                    # Use per-stock factor snapshot at end_date
+                    try:
+                        try:
+                            end_period = pd.Period(end_date, freq='M')
+                        except Exception:
+                            end_period = pd.to_datetime(end_date).to_period('M')
+                        end_factors = (
+                            technical_factor_data[technical_factor_data['date'] == end_period]
+                            .groupby('gvkey')[factor_names]
+                            .mean()
+                            .fillna(0.0)
+                        )
+                        # Align to tau index
+                        end_factors = end_factors.reindex(tau_matrix.index).fillna(0.0)
+                        tilt_series = tau_matrix.mul(end_factors).sum(axis=1)
+                    except Exception as e:
+                        logger.warning(f"tau_mode='stock' failed to align factor snapshots: {e}")
+
+                if tilt_series is not None:
+                    tilt = np.nan_to_num(tilt_series.values, nan=0.0, posinf=0.0, neginf=0.0)
+                    expected_returns_df["Expected_Return"] += float(tau_scale) * tilt
+                    logger.info(f"Applied tau tilt mode='{tau_mode}' scale={tau_scale:.4f}")
+    except Exception as e:
+        logger.warning(f"Tau tilt application failed: {e}")
+
     expected_returns_df.rename(columns={"Expected_Return": "Expected Return"}, inplace=True)
-    
-    logger.info(f"Final dataset contains {len(common_gvkeys)} stocks")
-    logger.info(f"Expected returns range: {expected_returns_df['Expected Return'].min():.6f} to {expected_returns_df['Expected Return'].max():.6f}")
-    
+
+    logger.info(f"Final dataset contains {len(expected_returns_df)} stocks")
+    logger.info(
+        "Expected returns range: %.6f to %.6f",
+        expected_returns_df['Expected Return'].min(),
+        expected_returns_df['Expected Return'].max(),
+    )
+
     return expected_returns_df, tau_values_aligned, av_momentum
 
 
@@ -397,7 +456,9 @@ def get_taus_momentum(
 def get_expected_returns_ending(
     end_date: str, 
     data_path: str = "QEPM/data/",
-    returns_freq: str = 'M'
+    returns_freq: str = 'M',
+    tau_mode: str = 'off',  # 'off' | 'avg' | 'stock'
+    tau_scale: float = 0.05,
 ) -> pd.DataFrame:
     try:
         stock_returns = pd.read_csv(f"{data_path}all_data.csv")
@@ -488,7 +549,9 @@ def get_expected_returns_ending(
         economic_factor_data, 
         fundamental_factor_data, 
         technical_factor_data, 
-        end_date
+        end_date,
+        tau_mode=tau_mode,
+        tau_scale=tau_scale,
     )
     
     if expected_returns_df.empty:
