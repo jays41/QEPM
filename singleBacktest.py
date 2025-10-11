@@ -94,7 +94,7 @@ def calculate_turnover(prev_weights, curr_weights):
     
     return (prev_aligned - curr_aligned).abs().sum()
 
-def backtest(target_annual_risk, lookback_start_month, lookback_start_year, lookback_end_month, lookback_end_year, invest_start_month, invest_start_year, invest_end_month, invest_end_year, previous_weights=None, periods_per_year=12, returns_freq='M'):
+def backtest(target_annual_risk, lookback_start_month, lookback_start_year, lookback_end_month, lookback_end_year, invest_start_month, invest_start_year, invest_end_month, invest_end_year, previous_weights=None, periods_per_year=12, returns_freq='M', tau_mode: str = 'off', tau_scale: float = 0.05):
     lookback_start = pd.Timestamp(f"{lookback_start_year}-{lookback_start_month}-01")
     lookback_end = pd.Timestamp(f"{lookback_end_year}-{lookback_end_month}-01") + pd.offsets.MonthEnd(0)
     end_date_for_expected_returns = f'{lookback_end_year}-{lookback_end_month}'
@@ -119,7 +119,13 @@ def backtest(target_annual_risk, lookback_start_month, lookback_start_year, look
     screened_stocks = screened_stocks_df['stock'].tolist()
     print(f"Selected {len(screened_stocks)} stocks from screening")
     
-    expected_returns_df = get_expected_returns_ending(end_date_for_expected_returns, "QEPM/data/", returns_freq=returns_freq)
+    expected_returns_df = get_expected_returns_ending(
+        end_date_for_expected_returns,
+        "QEPM/data/",
+        returns_freq=returns_freq,
+        tau_mode=tau_mode,
+        tau_scale=tau_scale,
+    )
     expected_returns_df = expected_returns_df.reset_index()
     
     # Filter expected returns to only include screened stocks
