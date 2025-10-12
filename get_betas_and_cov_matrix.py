@@ -1,7 +1,14 @@
 import pandas as pd
 import numpy as np
 
-def get_preweighting_data(expected_returns_df: pd.DataFrame, start_date, end_date, returns_freq: str = 'M'):
+def get_preweighting_data(
+    expected_returns_df: pd.DataFrame,
+    start_date,
+    end_date,
+    returns_freq: str = 'M',
+    invest_start=None,
+    invest_end=None,
+):
 
     # Ensure 'gvkey' column exists
     if 'gvkey' not in expected_returns_df.columns:
@@ -53,14 +60,13 @@ def get_preweighting_data(expected_returns_df: pd.DataFrame, start_date, end_dat
     stock_data.loc[stock_data['return'] > upper_limit, 'return'] = upper_limit
     stock_data.loc[stock_data['return'] < lower_limit, 'return'] = lower_limit
 
-    # Create pivot table of returns
+    # Create pivot table of returns (ticker columns)
     returns_pivot = stock_data.pivot(index='date', columns='ticker', values='return')
 
-    # Create sector mapping
-    sector_mapping = stock_data.drop_duplicates('ticker').set_index('ticker')['sector']
-
-    # Map gvkey to tickers
-    gvkey_mapping = stock_data.drop_duplicates('ticker').set_index('ticker')['gvkey']
+    # Create sector mapping and gvkey mapping (ticker-indexed)
+    meta = stock_data.drop_duplicates('ticker')[['ticker', 'gvkey', 'sector']].set_index('ticker')
+    sector_mapping = meta['sector']
+    gvkey_mapping = meta['gvkey']
 
     # Validate expected returns
     
@@ -68,40 +74,110 @@ def get_preweighting_data(expected_returns_df: pd.DataFrame, start_date, end_dat
     # expected_returns = expected_returns_df['Expected Return']
     tickers_to_keep = gvkey_mapping[gvkey_mapping.isin(expected_returns.index)].index
 
-    # Filter returns and sector mapping to match expected returns
+    # Filter returns and sector mapping to match expected returns universe
     returns_pivot = returns_pivot[tickers_to_keep]
-    sector_mapping = sector_mapping[sector_mapping.index.isin(tickers_to_keep)]
-    gvkey_mapping = gvkey_mapping[gvkey_mapping.index.isin(tickers_to_keep)]
+    sector_mapping = sector_mapping.loc[tickers_to_keep]
+    gvkey_mapping = gvkey_mapping.loc[tickers_to_keep]
+
+    # Rename columns to gvkey and deduplicate (prefer last if multiple tickers map to same gvkey)
+    returns_pivot.columns = returns_pivot.columns.map(gvkey_mapping)
+    if returns_pivot.columns.duplicated().any():
+        returns_pivot = returns_pivot.groupby(level=0, axis=1).last()
+    # Build sector mapping by gvkey
+    sectors_df = pd.DataFrame({'gvkey': gvkey_mapping.values, 'sector': sector_mapping.values})
+    sectors_gv = sectors_df.drop_duplicates('gvkey').set_index('gvkey')['sector']
+
+    # Align expected_returns to available gvkeys and preserve order
+    universe = expected_returns.index.intersection(returns_pivot.columns)
+    expected_returns = expected_returns.loc[universe]
+    returns_pivot = returns_pivot[universe]
+    sectors_gv = sectors_gv.reindex(universe)
+
+    # Enforce invest-window tradability: require non-NaN returns for all periods in invest window
+    if invest_start is not None and invest_end is not None:
+        invest_mask = (returns_pivot.index >= pd.to_datetime(invest_start)) & (
+            returns_pivot.index <= pd.to_datetime(invest_end)
+        )
+        if invest_mask.any():
+            tradable = returns_pivot.loc[invest_mask].notna().all(axis=0)
+            tradable_universe = tradable[tradable].index
+            # Re-align to tradable subset
+            expected_returns = expected_returns.loc[tradable_universe]
+            returns_pivot = returns_pivot[tradable_universe]
+            sectors_gv = sectors_gv.reindex(tradable_universe)
 
     # Calculate covariance matrix using recent data
-    horizon = 36 if returns_freq == 'M' else 12  # 3 years of months or ~3 years of quarters
+    horizon = 36 if returns_freq == 'M' else 12  # window used to slice recent history
     recent_period = min(horizon, len(returns_pivot))
     recent_returns = returns_pivot.iloc[-recent_period:]
 
-    # Remove stocks with too many missing values
-    missing_threshold = 0.3  # 30%
+    # Remove stocks with excessive missing values in recent window
+    missing_threshold = 0.5  # allow up to 50% missing in recent returns window
     missing_pct = recent_returns.isna().mean()
-    tickers_to_keep = missing_pct[missing_pct < missing_threshold].index
-    recent_returns = recent_returns[tickers_to_keep]
-    sector_mapping = sector_mapping[sector_mapping.index.isin(tickers_to_keep)]
-    gvkey_mapping = gvkey_mapping[gvkey_mapping.index.isin(tickers_to_keep)]
-    expected_returns = expected_returns[expected_returns.index.isin(gvkey_mapping.values)]
+    keep_cols = missing_pct[missing_pct <= missing_threshold].index
+    recent_returns = recent_returns[keep_cols]
+    expected_returns = expected_returns.reindex(keep_cols).dropna()
+    sectors_gv = sectors_gv.reindex(expected_returns.index)
+    recent_returns = recent_returns[expected_returns.index]
 
-    # Fill remaining NaN values
-    recent_returns = recent_returns.ffill().bfill().fillna(0)
+    # Pairwise covariance with constant-correlation shrinkage
+    min_history_periods = 24 if returns_freq == 'M' else 8
+    emp_cov = recent_returns.cov(min_periods=min_history_periods)
+    # If emp_cov is empty or 1x1, fall back to diagonal with sample variances
+    if emp_cov.shape[0] <= 1:
+        variances = recent_returns.var().replace([np.inf, -np.inf], np.nan).fillna(1e-4)
+        cov_matrix = np.diag(variances.values)
+        cov_matrix = pd.DataFrame(cov_matrix, index=recent_returns.columns, columns=recent_returns.columns)
+    else:
+        # Replace NaNs with 0 on diagonal and compute std, clamp tiny stds
+        emp_cov_filled = emp_cov.fillna(0)
+        diag = np.diag(emp_cov_filled.values)
+        diag = np.where(diag <= 0, 1e-8, diag)
+        std = np.sqrt(diag)
+        std = np.where(std <= 1e-8, 1e-8, std)
+        # Compute correlation matrix
+        with np.errstate(invalid='ignore', divide='ignore'):
+            denom = np.outer(std, std)
+            corr = emp_cov_filled.values / denom
+        # Set diagonal to 1
+        np.fill_diagonal(corr, 1.0)
+        # Average off-diagonal correlation; if all NaN, set to 0.0
+        off_mask = ~np.eye(corr.shape[0], dtype=bool)
+        off_vals = corr[off_mask]
+        if np.isnan(off_vals).all():
+            rho_bar = 0.0
+            corr = np.where(np.isnan(corr), 0.0, corr)
+        else:
+            rho_bar = np.nanmean(off_vals)
+            corr = np.where(np.isnan(corr), rho_bar, corr)
+        # Shrinkage
+        lam = 0.3
+        J = np.ones_like(corr)
+        target_corr = rho_bar * (J - np.eye(corr.shape[0])) + np.eye(corr.shape[0])
+        shrunk_corr = (1 - lam) * corr + lam * target_corr
+        # Reconstruct covariance
+        cov_matrix = (shrunk_corr * denom)
+        cov_matrix = pd.DataFrame(cov_matrix, index=recent_returns.columns, columns=recent_returns.columns)
+        # Replace any residual NaNs or infs
+        cov_matrix = cov_matrix.replace([np.inf, -np.inf], np.nan).fillna(0.0)
 
-    # Compute weighted covariance matrix
-    weights = np.exp(np.linspace(-1, 0, recent_period))
-    weights = weights / weights.sum()
-    demeaned_returns = recent_returns.subtract(recent_returns.mean())
-    weighted_returns = demeaned_returns.multiply(np.sqrt(weights[:, np.newaxis]), axis=0)
-    cov_matrix = weighted_returns.T @ weighted_returns
-    cov_matrix = pd.DataFrame(cov_matrix, index=recent_returns.columns, columns=recent_returns.columns)
+    # Ensure positive definiteness by jitter if needed
+    try:
+        np.linalg.cholesky(cov_matrix.values)
+    except np.linalg.LinAlgError:
+        trace = np.trace(cov_matrix.values)
+        jitter = 1e-6 * (trace / max(1, len(cov_matrix))) if trace > 0 else 1e-6
+        cov_matrix.values[range(len(cov_matrix)), range(len(cov_matrix))] += jitter
 
-    # Ensure covariance matrix is well-conditioned
-    min_eigenvalue = np.min(np.linalg.eigvals(cov_matrix))
-    if min_eigenvalue < 1e-6:
-        cov_matrix += np.eye(len(cov_matrix)) * max(1e-6, 1e-4 * np.trace(cov_matrix) / len(cov_matrix))
+    # Reorder stock_data to match expected_returns order (gvkey) for consistent ticker mapping
+    # Build gvkey -> ticker map (choose last occurrence if duplicates)
+    gv_to_ticker = meta.reset_index().drop_duplicates('gvkey', keep='last').set_index('gvkey')['ticker']
+    tickers_in_order = [gv_to_ticker.get(gv) for gv in expected_returns.index]
+    tickers_in_order = [t for t in tickers_in_order if t is not None]
+    if 'ticker' in stock_data.columns:
+        stock_data = stock_data[stock_data['ticker'].isin(tickers_in_order)].copy()
+        stock_data['ticker'] = pd.Categorical(stock_data['ticker'], categories=tickers_in_order, ordered=True)
+        stock_data = stock_data.sort_values('ticker')
 
     # Calculate betas
     try:
@@ -130,23 +206,22 @@ def get_preweighting_data(expected_returns_df: pd.DataFrame, start_date, end_dat
 
         betas = {}
         market_var = aligned_market.var()
-        for ticker in recent_returns.columns:
-            stock_return = recent_returns[ticker]
+        for gv in recent_returns.columns:
+            stock_return = recent_returns[gv]
             cov_with_market = stock_return.cov(aligned_market)
             beta = cov_with_market / market_var
-            betas[ticker] = np.clip(beta, -3.0, 3.0)
+            betas[gv] = np.clip(beta, -3.0, 3.0)
         betas = pd.Series(betas)
     except Exception as e:
         print(f"Error calculating betas: {e}")
         betas = pd.Series(1.0, index=recent_returns.columns)
 
-    # Map betas to gvkey
-    betas.index = gvkey_mapping[betas.index]
-    betas = betas.values
+    # Ensure outputs aligned to expected_returns index (gvkey order)
+    betas = betas.reindex(expected_returns.index).fillna(1.0).values
 
-    # Map sectors to numeric values
-    sector_dict = {sector: i for i, sector in enumerate(sector_mapping.unique())}
-    sectors = sector_mapping.map(sector_dict)
+    # Map sectors to numeric values in gvkey order
+    sector_dict = {sector: i for i, sector in enumerate(sectors_gv.dropna().unique())}
+    sectors = sectors_gv.map(sector_dict).reindex(expected_returns.index).fillna(-1).astype(int).values
     
     # print(f"betas:\n{betas}")
     
