@@ -3,6 +3,97 @@ import numpy as np
 import cvxpy as cp
 
 def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sectors_array, target_annual_risk, periods_per_year=12):
+    # Sanitize inputs (dtype only here)
+    expected_returns = np.asarray(expected_returns, dtype=float)
+    betas = np.asarray(betas, dtype=float)
+    sectors_array = np.asarray(sectors_array)
+    cov_matrix = np.asarray(cov_matrix, dtype=float)
+
+    # Helper: impute NaNs/Infs in ER with sector medians then global median
+    def _impute_er(er: np.ndarray, sectors: np.ndarray) -> np.ndarray:
+        er = er.copy()
+        # Treat infs as NaN for imputation
+        er[~np.isfinite(er)] = np.nan
+        if np.any(np.isnan(er)):
+            s = pd.Series(sectors)
+            er_s = pd.Series(er)
+            # Sector median map (dropna per sector)
+            med_map = er_s.groupby(s).median()
+            # Fill per sector where possible
+            for sec, med in med_map.items():
+                if np.isfinite(med):
+                    mask = (s.values == sec) & np.isnan(er)
+                    er[mask] = med
+            # Global median fallback
+            if np.any(np.isnan(er)):
+                global_med = np.nanmedian(er)
+                if not np.isfinite(global_med):
+                    global_med = 0.0
+                er[np.isnan(er)] = global_med
+        return er
+
+    # Helper: impute NaNs/Infs in betas with sector medians then default 1.0, clamp
+    def _impute_betas(b: np.ndarray, sectors: np.ndarray) -> np.ndarray:
+        b = b.copy()
+        b[~np.isfinite(b)] = np.nan
+        if np.any(np.isnan(b)):
+            s = pd.Series(sectors)
+            b_s = pd.Series(b)
+            med_map = b_s.groupby(s).median()
+            for sec, med in med_map.items():
+                if np.isfinite(med):
+                    mask = (s.values == sec) & np.isnan(b)
+                    b[mask] = med
+            if np.any(np.isnan(b)):
+                b[np.isnan(b)] = 1.0
+        # Clamp extreme betas
+        b = np.clip(b, -3.0, 3.0)
+        return b
+
+    # Helper: sanitize covariance by imputing correlations and ensuring PD
+    def _sanitize_cov(cov: np.ndarray) -> np.ndarray:
+        cov = 0.5 * (cov + cov.T)
+        cov = cov.copy()
+        # Replace inf with NaN for processing
+        cov[~np.isfinite(cov)] = np.nan
+        # Variances
+        var = np.diag(cov)
+        # If any diag NaN/<=0, set small positive
+        var = np.where(~np.isfinite(var) | (var <= 0), 1e-6, var)
+        std = np.sqrt(var)
+        # Build corr with NaNs where denom invalid
+        denom = np.outer(std, std)
+        with np.errstate(invalid='ignore', divide='ignore'):
+            corr = cov / denom
+        # Set diag to 1
+        np.fill_diagonal(corr, 1.0)
+        # Compute average off-diagonal correlation ignoring NaNs
+        off_mask = ~np.eye(corr.shape[0], dtype=bool)
+        off_vals = corr[off_mask]
+        if np.isnan(off_vals).all():
+            rho_bar = 0.0
+        else:
+            rho_bar = np.nanmean(off_vals)
+        # Impute NaNs in corr with rho_bar
+        corr = np.where(np.isnan(corr), rho_bar, corr)
+        # Reconstruct covariance
+        cov_rec = corr * denom
+        cov_rec = 0.5 * (cov_rec + cov_rec.T)
+        # Ensure PD with jitter
+        try:
+            np.linalg.cholesky(cov_rec)
+        except np.linalg.LinAlgError:
+            trace = np.trace(cov_rec)
+            jitter = 1e-6 * (trace / max(1, cov_rec.shape[0])) if trace > 0 else 1e-6
+            cov_rec = cov_rec + np.eye(cov_rec.shape[0]) * jitter
+        return cov_rec
+
+    # Apply imputations
+    expected_returns = _impute_er(expected_returns, sectors_array)
+    betas = _impute_betas(betas, sectors_array)
+    cov_matrix = _sanitize_cov(cov_matrix)
+    # Force symmetry one more time
+    cov_matrix = 0.5 * (cov_matrix + cov_matrix.T)
     n = len(expected_returns)
 
     # Convert annual volatility target to per-period volatility (risk constraint uses stdev units)
@@ -34,32 +125,54 @@ def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sect
 
     w = cp.Variable(n)  # Stock weights
 
-    cov_chol = np.linalg.cholesky(cov_matrix)
+    # Ensure PD via jitter if needed
+    try:
+        cov_chol = np.linalg.cholesky(cov_matrix)
+    except np.linalg.LinAlgError:
+        trace = np.trace(cov_matrix)
+        jitter = 1e-6 * (trace / max(1, n)) if trace > 0 else 1e-6
+        cov_matrix = cov_matrix + np.eye(n) * jitter
+        cov_chol = np.linalg.cholesky(cov_matrix)
 
     # Objective Function: Maximize Expected Return
-    objective = cp.Maximize(cp.sum(cp.multiply(expected_returns, w)))
+    # Center ER to reduce degeneracy; still maximize total expected return
+    er_centered = expected_returns - np.median(expected_returns)
+    objective = cp.Maximize(cp.sum(cp.multiply(er_centered, w)))
 
     # Constraints
-    constraints = [
-        cp.norm(cp.sum(w), 2) <= epsilon,  # Dollar neutrality with tiny slack
-        cp.norm(cp.sum(cp.multiply(betas, w)), 2) <= epsilon,  # Beta neutrality with slack
-        cp.norm(cov_chol @ w, 2) <= target_risk,  # SOC formulation of risk constraint
-        cp.norm(w, 1) <= 2,  # Gross exposure limit (100% long, 100% short)
-        w >= -0.2,  # Short position limit
-        w <= 0.2  # Long position limit
-    ]
+    constraints = []
+    # Dollar neutrality with scalar tolerance
+    constraints.append(cp.abs(cp.sum(w)) <= 1e-3)
+    # Risk constraint (SOC)
+    constraints.append(cp.norm(cov_chol @ w, 2) <= target_risk)
+    # Gross exposure and box bounds
+    constraints.append(cp.norm1(w) <= 2)
+    constraints += [w >= -0.2, w <= 0.2]
 
-    # Add sector-specific constraints
+    # Adaptive sector constraints
+    tiny_universe = n < 10
+    strict_min = 4   # >= 4 names → exact neutrality (unless tiny universe)
+    soft_min = 2     # 2–3 names → soft neutrality
+    tol_small = 0.02
+    tol_tiny = 0.05
     for sector_id in unique_sectors:
         indices = sector_indices[sector_id]
-        sector_weight = w[indices]
-        
-        # Sector neutrality - sum of weights within sector should be zero
-        constraints.append(cp.sum(sector_weight) == 0)
-        
-        # Proportional sector weights - gross exposure should be proportional to sector size
-        max_sector_exposure = sector_proportions[sector_id] * 2  # Proportional to sector size
-        constraints.append(cp.sum(cp.abs(sector_weight)) <= max_sector_exposure)
+        k = len(indices)
+        if k >= strict_min and not tiny_universe:
+            # Exact neutrality only when enough names and universe isn't tiny
+            constraints.append(cp.sum(w[indices]) == 0)
+        elif k >= soft_min:
+            # Soft neutrality tolerance for small sectors
+            tol = tol_tiny if tiny_universe else tol_small
+            constraints.append(cp.abs(cp.sum(w[indices])) <= tol)
+        # else: k == 1 → skip neutrality
+        # Proportional sector exposure with a floor
+        max_sector_exposure = max(0.25, sector_proportions[sector_id] * 2.2)
+        constraints.append(cp.sum(cp.abs(w[indices])) <= max_sector_exposure)
+
+    # Beta neutrality with tolerance
+    beta_tol = 0.05 if tiny_universe else 0.03
+    constraints.append(cp.abs(cp.sum(cp.multiply(betas, w))) <= beta_tol)
 
 
     # Try solving the problem with improved solver parameters
@@ -94,6 +207,9 @@ def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sect
     # Output optimized weights
     if problem.status == "optimal" or problem.status == "optimal_inaccurate":
         optimized_weights = w.value
+        if optimized_weights is None:
+            optimized_weights = np.zeros(n)
+        optimized_weights = np.nan_to_num(optimized_weights, nan=0.0, posinf=0.0, neginf=0.0)
         print("\nOptimization successful!")
         print("Status:", problem.status)
         # print("Optimized weights:", optimized_weights)
@@ -238,4 +354,5 @@ def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sect
         
         return portfolio_df, problem.status
 
+    # Fallback: return empty portfolio if unsolved
     return None
