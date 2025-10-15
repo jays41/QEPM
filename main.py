@@ -20,8 +20,16 @@ ReturnsFreq = Literal['M', 'Q']
 RETURNS_FREQ: ReturnsFreq = 'Q'     # 'M' (monthly) or 'Q' (quarterly)
 PERIODS_PER_YEAR = {'M': 12, 'Q': 4}[RETURNS_FREQ]
 
+# Simple model switch: neutral (no tau tilt) vs tilt (use taus in expected returns)
+ModelMode = Literal['neutral', 'tilt']
+MODEL_MODE: ModelMode = 'tilt'  # change to 'neutral' to disable tau tilt
+
+# Tau tilt settings (when MODEL_MODE == 'tilt')
+TAU_MODE = 'avg'    # 'avg' | 'stock'
+TAU_SCALE = 0.05    # keep modest (e.g., 0.02–0.10)
+
 investment_start_year = 2017
-investment_end_year = 2017
+investment_end_year = 2018
 
 quarters = [
     ('01', '12', '01', '03'),  # Q1: Use Jan-Dec data, invest Q1
@@ -75,7 +83,9 @@ for end_year in investment_dates:
             invest_end_month, end_year,
             previous_weights,
             periods_per_year=PERIODS_PER_YEAR,
-            returns_freq=RETURNS_FREQ
+            returns_freq=RETURNS_FREQ,
+            tau_mode=(TAU_MODE if MODEL_MODE == 'tilt' else 'off'),
+            tau_scale=(TAU_SCALE if MODEL_MODE == 'tilt' else 0.0),
         )
         
         if isOptimal:
@@ -157,8 +167,16 @@ plt.figure(figsize=(15, 8))
 plt.plot(portfolio_dates, values, marker='o', linewidth=2, markersize=4, label='QEPM Portfolio')
 if sp_aligned:
     plt.plot(sp_dates, sp_normalised, marker='s', linewidth=2, markersize=3, label='S&P 500')
-# Show correct label/value for target annual risk
-plt.title(f'Portfolio Value Over Time (QEPM Strategy) | Target Annual Risk = {target_annual_risk:.1%}', fontsize=14)
+# Build mode label for the figure title
+mode_label = (
+    f"Model: Factor Tilt (taus {TAU_MODE}, scale={TAU_SCALE})" if MODEL_MODE == 'tilt' else "Model: Beta-Neutral"
+)
+
+# Show correct label/value for target annual risk and mode
+plt.title(
+    f'Portfolio Value Over Time (QEPM Strategy) | {mode_label} | Target Annual Risk = {target_annual_risk:.1%}',
+    fontsize=14
+)
 plt.xlabel('Quarter-End', fontsize=12)
 plt.ylabel('Portfolio Value (£)', fontsize=12)
 plt.xticks(rotation=45)
@@ -170,7 +188,8 @@ config_text = (
     f"Config: risk={target_annual_risk:.1%}, "
     f"lookback={LOOKBACK_MONTHS}m, "
     f"freq={RETURNS_FREQ}/{PERIODS_PER_YEAR}py, "
-    f"years={investment_start_year}-{investment_end_year}"
+    f"years={investment_start_year}-{investment_end_year}, "
+    f"mode={'tilt' if MODEL_MODE == 'tilt' else 'neutral'}"
 )
 
 print(f"Run {config_text}")
