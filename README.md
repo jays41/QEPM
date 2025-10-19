@@ -17,10 +17,6 @@ To implement:
 
 Alpha calculation for the portfolio
 Performance attribution (??)
-Table presentation:
-
-    dont forget corr with S&P
-
 look into sector beta neutrality
 
 change beta calculation to just used the saved data in s&p_data.csv
