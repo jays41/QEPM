@@ -3,43 +3,22 @@ from get_betas_and_cov_matrix import get_preweighting_data
 from stratified_weights import get_stratified_weights
 from fixed_expected_returns import get_expected_returns_ending
 from screenByFactors import get_z_scores_dataframe
+from config import CONFIG
 
 print('Starting backtest...')
 
-stock_returns = pd.read_csv(r"QEPM\data\all_data.csv")
-technical_factor_data = pd.read_csv(r"QEPM\data\technical_factors.csv") # date
-economic_factor_data = pd.read_csv(r"QEPM\data\econ_data.csv") # PeriodDate
-fundamental_factor_data = pd.read_csv(r"QEPM\data\stock_fundamental_data.csv") # public_date
+stock_returns = pd.read_csv(CONFIG.get_full_path(CONFIG.ALL_DATA_FILE))
+technical_factor_data = pd.read_csv(CONFIG.get_full_path(CONFIG.TECHNICAL_DATA_FILE))  # date
+fundamental_factor_data = pd.read_csv(CONFIG.get_full_path(CONFIG.FUNDAMENTAL_DATA_FILE))  # public_date
 
 stock_returns['date'] = pd.to_datetime(stock_returns['date'])
 stock_returns['date'] = stock_returns['date'].dt.to_period('M')
 stock_returns['returns'] = stock_returns.groupby('gvkey')['close'].pct_change()
 stock_returns = stock_returns.groupby(['gvkey', 'date'])['returns'].mean().reset_index()
 
-economic_factor_data = (
-    economic_factor_data.dropna(subset=['Series_Value'])
-    .groupby(['PeriodDate', 'EcoSeriesID'])['Series_Value']
-    .first()
-    .reset_index()
-)
-
-economic_factor_data.columns = economic_factor_data.columns.str.strip()
-economic_factor_data = economic_factor_data.pivot(index='PeriodDate', columns='EcoSeriesID', values='Series_Value')
-economic_factor_data = economic_factor_data.reset_index()
-
-economic_factor_data['PeriodDate'] = pd.to_datetime(economic_factor_data['PeriodDate']).dt.to_period('M')
-
-economic_factor_data = stock_returns.merge(economic_factor_data, left_on='date', right_on='PeriodDate', how='left')
-
-economic_factor_data = (
-    economic_factor_data.groupby(['date', 'gvkey'])
-    .first()
-    .reset_index()
-)
-
 fundamental_factor_data['public_date'] = pd.to_datetime(fundamental_factor_data['public_date']).dt.to_period('M')
 
-columns_to_keep = ['gvkey', 'public_date', 'npm', 'opmad', 'gpm', 'ptpm', 'pretret_earnat', 'equity_invcap', 'debt_invcap', 'capital_ratio', 'invt_act', 'rect_act', 'debt_assets', 'debt_capital', 'cash_ratio', 'adv_sale']
+columns_to_keep = ['gvkey', 'public_date'] + CONFIG.FUNDAMENTAL_FACTORS
 fundamental_factor_data = fundamental_factor_data[columns_to_keep]
 
 fundamental_factor_data = (
@@ -77,7 +56,6 @@ price_data = pd.read_csv(r"QEPM\data\all_data.csv")
 price_data['date'] = pd.to_datetime(price_data['date'])
 
 technical_factor_data['date'] = technical_factor_data['date'].dt.to_timestamp()
-economic_factor_data['PeriodDate'] = economic_factor_data['PeriodDate'].dt.to_timestamp()
 fundamental_factor_data['date'] = fundamental_factor_data['date'].dt.to_timestamp()
 
 ###########################################################################
@@ -121,7 +99,7 @@ def backtest(target_annual_risk, lookback_start_month, lookback_start_year, look
     
     expected_returns_df = get_expected_returns_ending(
         end_date_for_expected_returns,
-        "QEPM/data/",
+        CONFIG.DATA_PATH,
         returns_freq=returns_freq,
         tau_mode=tau_mode,
         tau_scale=tau_scale,
@@ -168,7 +146,7 @@ def backtest(target_annual_risk, lookback_start_month, lookback_start_year, look
     start_prices = price_data[price_data['date'] == actual_invest_start_date].set_index('gvkey')['close']
     end_prices = price_data[price_data['date'] == actual_invest_end_date].set_index('gvkey')['close']
 
-    stock_prices = pd.read_csv(r"QEPM/data/stock_prices.csv")
+    stock_prices = pd.read_csv(CONFIG.get_full_path(CONFIG.STOCK_PRICES_FILE))
     translation_table = stock_prices[['gvkey', 'ticker']].drop_duplicates()
     ticker_to_gvkey = translation_table.set_index('ticker')['gvkey'].to_dict()
 
