@@ -6,11 +6,12 @@ import pandas as pd
 import numpy as np
 from clean_data import get_fundamental_data
 from fixed_expected_returns import get_betas
+from config import CONFIG
 
 # Load data once
 print("Loading data...")
-stock_data = pd.read_csv("QEPM/data/all_data.csv")
-fundamental_factor_data = pd.read_csv("QEPM/data/stock_fundamental_data.csv")
+stock_data = pd.read_csv(CONFIG.get_full_path(CONFIG.ALL_DATA_FILE))
+fundamental_factor_data = pd.read_csv(CONFIG.get_full_path(CONFIG.FUNDAMENTAL_DATA_FILE))
 
 # Process stock returns correctly
 stock_data['date'] = pd.to_datetime(stock_data['date']).dt.to_period('M')
@@ -19,9 +20,7 @@ stock_returns = stock_data.groupby(['gvkey', 'date'])['returns'].mean().reset_in
 
 # Process fundamental data
 fundamental_factor_data['public_date'] = pd.to_datetime(fundamental_factor_data['public_date']).dt.to_period('M')
-fundamental_columns = ['gvkey', 'public_date', 'npm', 'opmad', 'gpm', 'ptpm', 'pretret_earnat', 
-                      'equity_invcap', 'debt_invcap', 'capital_ratio', 'invt_act', 'rect_act', 
-                      'debt_assets', 'debt_capital', 'cash_ratio', 'adv_sale']
+fundamental_columns = ['gvkey', 'public_date'] + CONFIG.FUNDAMENTAL_FACTORS
 fundamental_factor_data = fundamental_factor_data[fundamental_columns]
 
 # Merge and get betas
@@ -32,35 +31,18 @@ fundamental_betas, _ = get_betas(merged_data, 'date')
 # Prepare selected data for Z-score calculation
 selected_data = stock_data[['gvkey', 'date', 'gind']].drop_duplicates().reset_index(drop=True)
 
-# Load economic betas once (with error handling)
-try:
-    economic_betas = pd.read_csv("QEPM/data/econ_beta_results.csv")
-except FileNotFoundError:
-    print("Warning: econ_beta_results.csv not found, economic factors will be unavailable")
-    economic_betas = pd.DataFrame()
-
 missing_data_counter = defaultdict(int)
 
-# Factor definitions
-ECON_FACTORS = [200380, 592, 598, 2177, 134896, 202661, 202664, 202811, 202813, 201723, 137439, 148429, 202074, 202600, 202605]
-FUNDAMENTAL_FACTORS = ['npm', 'opmad', 'gpm', 'ptpm', 'pretret_earnat', 'equity_invcap', 'debt_invcap', 'capital_ratio', 'invt_act', 'rect_act', 'debt_assets', 'debt_capital', 'cash_ratio', 'adv_sale']
-
 # Default weights
-DEFAULT_FUNDAMENTAL_WEIGHTS = {factor: 1.0 for factor in FUNDAMENTAL_FACTORS}
-DEFAULT_ECONOMIC_WEIGHTS = {factor: 1.0 for factor in ECON_FACTORS}
-DEFAULT_GROUP_WEIGHTS = {'fundamental': 1.0, 'economic': 1.0}
+DEFAULT_FUNDAMENTAL_WEIGHTS = {factor: 1.0 for factor in CONFIG.FUNDAMENTAL_FACTORS}
 
-def get_factor_beta(stock, factor, factor_type):
-    """Unified function to get beta statistics for both fundamental and economic factors"""
+def get_factor_beta(stock, factor, factor_type='fundamental'):
+    """Get beta statistics for fundamental factors"""
     factor = str(factor)
     
-    # Choose the appropriate dataframe
-    if factor_type == 'fundamental':
-        betas_df = fundamental_betas
-        factor_prefix = 'fundamental'  # Fixed: use local variable name
-    else:  # economic
-        betas_df = economic_betas
-        factor_prefix = 'econ'  # Fixed: use local variable name
+    # Use fundamental betas only
+    betas_df = fundamental_betas
+    factor_prefix = 'fundamental'
     
     if betas_df.empty:
         missing_data_counter[f'{factor_prefix}_{factor}'] += 1
@@ -107,13 +89,11 @@ def get_economic_factor_beta(stock, factor):
 
 
 def calculate_factor_group_z_score(stock, factor_group, factor_weights=None):
-    """Calculate Z-score for a group of factors (fundamental or economic)"""
+    """Calculate Z-score for a group of factors (fundamental only)"""
     if factor_group == 'fundamental':
-        factors, get_beta_func, default_weights = FUNDAMENTAL_FACTORS, get_fundamental_factor_beta, DEFAULT_FUNDAMENTAL_WEIGHTS
-    elif factor_group == 'economic':
-        factors, get_beta_func, default_weights = ECON_FACTORS, get_economic_factor_beta, DEFAULT_ECONOMIC_WEIGHTS
+        factors, get_beta_func, default_weights = CONFIG.FUNDAMENTAL_FACTORS, get_fundamental_factor_beta, DEFAULT_FUNDAMENTAL_WEIGHTS
     else:
-        raise ValueError("factor_group must be 'fundamental' or 'economic'")
+        raise ValueError("factor_group must be 'fundamental'")
     
     if factor_weights is None:
         factor_weights = default_weights
@@ -143,52 +123,34 @@ def calculate_factor_group_z_score(stock, factor_group, factor_weights=None):
     return weighted_z_score, len(valid_factors), valid_factors, normalized_weights
 
 
-def calculate_stock_z_score(stock, sector, fundamental_factor_weights=None, economic_factor_weights=None, group_weights=None):
-    """Calculate aggregate Z-score for a stock combining fundamental and economic factors"""
-    if group_weights is None:
-        group_weights = DEFAULT_GROUP_WEIGHTS
-    
-    # Calculate factor group Z-scores
+def calculate_stock_z_score(stock, sector, fundamental_factor_weights=None):
+    """Calculate Z-score for a stock using fundamental factors only"""
+    # Calculate fundamental factor Z-scores
     fundamental_result = calculate_factor_group_z_score(stock, 'fundamental', fundamental_factor_weights)
-    economic_result = calculate_factor_group_z_score(stock, 'economic', economic_factor_weights)
     
-    available_groups = {}
-    group_details = {}
-    
-    # Process results
-    for result, group_name in [(fundamental_result, 'fundamental'), (economic_result, 'economic')]:
-        if result[0] is not None:
-            available_groups[group_name] = result[0]
-            group_details[group_name] = {
-                'z_score': result[0],
-                'factors_used': result[1],
-                'individual_z_scores': result[2],
-                'normalised_weights': result[3]
-            }
-    
-    if not available_groups:
+    if fundamental_result[0] is None:
         return None
     
-    # Calculate aggregate Z-score with normalized group weights
-    available_group_weights = {group: group_weights.get(group, 1.0) for group in available_groups.keys()}
-    total_group_weight = sum(available_group_weights.values())
+    z_score, factors_used, individual_z_scores, normalized_weights = fundamental_result
     
-    if total_group_weight <= 0:
+    if np.isnan(z_score) or np.isinf(z_score):
         return None
     
-    normalized_group_weights = {group: weight / total_group_weight for group, weight in available_group_weights.items()}
-    aggregate_z_score = sum(normalized_group_weights[group] * z_score for group, z_score in available_groups.items())
+    group_details = {
+        'fundamental': {
+            'z_score': z_score,
+            'factors_used': factors_used,
+            'individual_z_scores': individual_z_scores,
+            'normalised_weights': normalized_weights
+        }
+    }
     
-    if np.isnan(aggregate_z_score) or np.isinf(aggregate_z_score):
-        return None
-    
-    group_details['normalised_group_weights'] = normalized_group_weights
-    return aggregate_z_score, stock, sector, group_details
+    return z_score, stock, sector, group_details
 
 
 def get_z_scores_dataframe(start_date, end_date, z_score_threshold=None, top_percentile=None, 
                           winsorise_percentile=None, z_score_cap=None,
-                          fundamental_factor_weights=None, economic_factor_weights=None, group_weights=None):
+                          fundamental_factor_weights=None):
 
     if selected_data.empty:
         print("Error: No stock data available for Z-score calculation")
@@ -207,26 +169,21 @@ def get_z_scores_dataframe(start_date, end_date, z_score_threshold=None, top_per
     for count, (i, row) in enumerate(stock_list.iterrows(), 1):
         stock, sector = row['gvkey'], row['gind']
         
-        result = calculate_stock_z_score(stock, sector, fundamental_factor_weights, 
-                                       economic_factor_weights, group_weights)
+        result = calculate_stock_z_score(stock, sector, fundamental_factor_weights)
         
         if result is not None:
             aggregate_z_score, stock_id, sector_id, group_details = result
             
             fund_z_score = group_details.get('fundamental', {}).get('z_score', np.nan)
-            econ_z_score = group_details.get('economic', {}).get('z_score', np.nan)
             fund_factors_used = group_details.get('fundamental', {}).get('factors_used', 0)
-            econ_factors_used = group_details.get('economic', {}).get('factors_used', 0)
             
             z_scores.append({
                 'z_score': aggregate_z_score,
                 'stock': stock_id,
                 'sector': sector_id,
                 'fundamental_z_score': fund_z_score,
-                'economic_z_score': econ_z_score,
                 'fundamental_factors_used': fund_factors_used,
-                'economic_factors_used': econ_factors_used,
-                'total_factors_used': fund_factors_used + econ_factors_used
+                'total_factors_used': fund_factors_used
             })
             
         # if count % 100 == 0:
@@ -247,16 +204,11 @@ def get_z_scores_dataframe(start_date, end_date, z_score_threshold=None, top_per
     print(f"95th percentile: {result_df['z_score'].quantile(0.95):.3f}")
     print(f"5th percentile: {result_df['z_score'].quantile(0.05):.3f}")
     
-    print(f"\nGroup-Level Statistics:")
+    print(f"\nFundamental Factor Statistics:")
     if 'fundamental_z_score' in result_df.columns:
         fund_scores = result_df['fundamental_z_score'].dropna()
         if len(fund_scores) > 0:
-            print(f"Fundamental Z-scores - Mean: {fund_scores.mean():.3f}, Std: {fund_scores.std():.3f}")
-    
-    if 'economic_z_score' in result_df.columns:
-        econ_scores = result_df['economic_z_score'].dropna()
-        if len(econ_scores) > 0:
-            print(f"Economic Z-scores - Mean: {econ_scores.mean():.3f}, Std: {econ_scores.std():.3f}")
+            print(f"Mean: {fund_scores.mean():.3f}, Std: {fund_scores.std():.3f}")
     
     # Winsorise (as recommended in feedback from Deutsche Bank)
     if winsorise_percentile is not None:
@@ -303,8 +255,6 @@ def get_z_scores_dataframe(start_date, end_date, z_score_threshold=None, top_per
         print(f"Positive z-scores: {positive_scores}, Negative z-scores: {negative_scores}")
         
         print(f"Average fundamental factors used: {result_df['fundamental_factors_used'].mean():.1f}")
-        print(f"Average economic factors used: {result_df['economic_factors_used'].mean():.1f}")
-        print(f"Average total factors used: {result_df['total_factors_used'].mean():.1f}")
     
     if missing_data_counter:
         print(f"\nMissing Data Summary:")
@@ -319,7 +269,7 @@ if __name__ == "__main__":
     end_date = "2016-12-12"
     
     print(f"Starting Z-score calculation for period {start_date} to {end_date}")
-    print(f"Loaded {len(selected_data)} stocks, {len(fundamental_betas)} fundamental betas, {len(economic_betas)} economic betas")
+    print(f"Loaded {len(selected_data)} stocks, {len(fundamental_betas)} fundamental betas")
     
     z_scores_df = get_z_scores_dataframe(
         start_date=start_date,

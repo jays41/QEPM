@@ -1,8 +1,15 @@
 import pandas as pd
 import numpy as np
 import cvxpy as cp
+from config import CONFIG
 
-def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sectors_array, target_annual_risk, periods_per_year=12):
+def get_stratified_weights(stock_data, expected_returns, cov_matrix, betas, sectors_array, target_annual_risk=None, periods_per_year=None):
+    # Use CONFIG defaults if not specified
+    if target_annual_risk is None:
+        target_annual_risk = CONFIG.TARGET_ANNUAL_RISK
+    if periods_per_year is None:
+        periods_per_year = CONFIG.PERIODS_PER_YEAR
+    
     # Sanitize inputs (dtype only here)
     expected_returns = np.asarray(expected_returns, dtype=float)
     betas = np.asarray(betas, dtype=float)

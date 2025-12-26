@@ -1,14 +1,18 @@
 import pandas as pd
 import numpy as np
+from config import CONFIG
 
 def get_preweighting_data(
     expected_returns_df: pd.DataFrame,
     start_date,
     end_date,
-    returns_freq: str = 'M',
+    returns_freq: str = None,
     invest_start=None,
     invest_end=None,
 ):
+    # Use CONFIG default if not specified
+    if returns_freq is None:
+        returns_freq = CONFIG.RETURNS_FREQ
 
     # Ensure 'gvkey' column exists
     if 'gvkey' not in expected_returns_df.columns:
@@ -24,7 +28,7 @@ def get_preweighting_data(
     expected_returns = expected_returns_df['Expected Return']
     
     # Load stock data
-    stock_data = pd.read_csv(r"QEPM\data\stock_prices.csv")
+    stock_data = pd.read_csv(CONFIG.get_full_path(CONFIG.STOCK_PRICES_FILE))
     stock_data['date'] = pd.to_datetime(stock_data['date'])
     stock_data = stock_data.sort_values(['ticker', 'date'])
 
