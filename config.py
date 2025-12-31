@@ -39,7 +39,7 @@ class Config:
     TOP_PERCENTILE: float = 0.20            # Select top 20% of stocks by composite Z-score
     MIN_STOCKS: int = 30                     # Minimum stocks required to proceed
     
-    RETURNS_FREQ: str = 'M'                  # 'M' for monthly, 'Q' for quarterly
+    RETURNS_FREQ: str = 'M'                  # 'M' for monthly, 'Q' for quarterly, 'B' for biannually, 'A' for annually
     PERIODS_PER_YEAR: int = 12               # 12 for monthly, 4 for quarterly
     LOOKBACK_DAYS: int = 252                 # Trading days for historical calculations
     
@@ -76,6 +76,8 @@ class Config:
             self.PERIODS_PER_YEAR = 12
         elif self.RETURNS_FREQ == 'Q':
             self.PERIODS_PER_YEAR = 4
+        elif self.RETURNS_FREQ == 'B':
+            self.PERIODS_PER_YEAR = 2
         elif self.RETURNS_FREQ == 'A':
             self.PERIODS_PER_YEAR = 1
         else:

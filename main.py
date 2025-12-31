@@ -13,23 +13,23 @@ previous_weights = None
 needs_revival = False  # Flag to track if revival is needed at start of next quarter
 
 target_annual_risk = 0.05
-LOOKBACK_MONTHS = 12
+LOOKBACK_MONTHS = 24
 
 # Time-scale knobs (switch to quarterly by setting PERIODS_PER_YEAR=4, RETURNS_FREQ='Q')
-ReturnsFreq = Literal['M', 'Q']
-RETURNS_FREQ: ReturnsFreq = 'Q'     # 'M' (monthly) or 'Q' (quarterly)
-PERIODS_PER_YEAR = {'M': 12, 'Q': 4}[RETURNS_FREQ]
+ReturnsFreq = Literal['M', 'Q', 'B', 'A']
+RETURNS_FREQ: ReturnsFreq = 'B'     # 'M' (monthly) or 'Q' (quarterly)
+PERIODS_PER_YEAR = {'M': 12, 'Q': 4, 'B': 2, 'A': 1}[RETURNS_FREQ]
 
 # Simple model switch: neutral (no tau tilt) vs tilt (use taus in expected returns)
 ModelMode = Literal['neutral', 'tilt']
-MODEL_MODE: ModelMode = 'tilt'  # change to 'neutral' to disable tau tilt
+MODEL_MODE: ModelMode = 'netural'  # change to 'neutral' to disable tau tilt
 
 # Tau tilt settings (when MODEL_MODE == 'tilt')
 TAU_MODE = 'avg'    # 'avg' | 'stock'
 TAU_SCALE = 0.05    # keep modest (e.g., 0.02–0.10)
 
-investment_start_year = 2017
-investment_end_year = 2018
+investment_start_year = 2012
+investment_end_year = 2012
 
 quarters = [
     ('01', '12', '01', '03'),  # Q1: Use Jan-Dec data, invest Q1
